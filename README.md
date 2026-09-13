@@ -2,7 +2,7 @@
 
 **MAD = Meeting Atmosphere Dial.** **Light** = a signal / bulb — not “lite” as in a cut-down edition.
 
-While a meeting plays on this machine (Zoom, Teams, a browser tab), Mad Light watches the **monitor source of the default audio sink** — the same stream you already hear on headphones or speakers — and shows a compact always-on-top **card**: a center heat circle (green / amber / red / idle grey) from crude energy features (rolling RMS and its short-term slope), a scrolling level, and three **activity lanes** (frequency bands of the mix).
+While a meeting plays on this machine (Zoom, Teams, a browser tab), Mad Light watches the **monitor source of the default audio sink** — the same stream you already hear on headphones or speakers — and shows a compact always-on-top **card**: a center heat circle (green / amber / red / idle grey) with an **emoji face**, plus one scrolling **speech-energy** strip. Optional frequency-band meters stay behind the gear.
 
 It is **not** a dashboard, **not** a labeled pill, **not** an emotion detector, **not** face reading, **not** speaker diarization, **not** a transcript, and it does not call a cloud API.
 
@@ -24,22 +24,24 @@ These are the north-star uses. They are why the light exists. **v0 still only sh
 
 ## How you get it
 
-1. **Runnable local app** — this repo, **Omarchy / Linux first**. Install, run `madlight`, watch the default-sink monitor. Compact floating card: heat circle + level + activity lanes.
+1. **Runnable local app** — this repo, **Omarchy / Linux first**. Install, run `madlight`, watch the default-sink monitor. Compact floating card: heat circle + face + one energy strip.
 2. **Spec for another agent** — give a coding agent **[SPEC.md](SPEC.md)** (“build Mad Light to this spec”). Optionally add [`.cursor/skills/mad-light/SKILL.md`](.cursor/skills/mad-light/SKILL.md). The expected result is a faithful **local dial + recording-indicator dot**, not the roadmap’s coach features.
 
 ## What it does
 
-| LED | Meaning (energy only) |
+| Face + circle | Meaning (energy only) |
 | --- | --- |
-| **green** | calm — listening, steady low-but-present energy |
-| **amber** | rising — mid energy, or energy climbing quickly |
-| **red** | hot — high RMS |
-| **dark grey + mic** | listening, sustained near-silence (armed, not paused) |
-| **dark grey + pause bars** | paused — capture off |
+| **🙂 green** | listening, calm — steady low-but-present energy |
+| **😐 amber** | listening, rising — mid energy, or energy climbing |
+| **😠 red** | listening, hot — high RMS |
+| **🙂 dark grey** | listening, near-silence (armed — still capturing) |
+| **🤐 dark grey** | paused — not listening, capture off |
 
-The overlay is a **compact floating card** (Voice Access–style chrome, not a dashboard): drag handle and close, **+ / −** (this heat feels right / wrong), a **center circle** (mic while listening, pause bars when capture is off), gear / help, a thin level under the circle, and **three activity lanes** (low / mid / high bands of the loopback mix). No speaker names. The tray icon mirrors the circle color. **Pause** is a click on the center circle (or Space / Escape / tray). Pause **stops capture immediately** (same kill switch as `--text` `off` / `pause`). Drag the handle or card to move; close quits.
+The overlay is a **compact floating card** (Voice Access–style chrome, not a dashboard): **Tune + / −** (this heat feels right / wrong), drag handle, close, a **center face** (click = pause ↔ listen), gear / help, and **one waveform** under the circle. There are **no** fixed “3 voice” lines on the default card. The tray icon mirrors the circle color. **Pause** is a click on the center face (Space is an optional shortcut; also Escape / tray). Pause **stops capture immediately** (same kill switch as `--text` `off` / `pause`). Drag the handle or card to move; close quits.
 
-Yellow waits for a **dwell** (~1.2 s of climb) so one emphatic word does not flip the dial. Waveform bars and activity lanes are smoothed (EMA / longer stride), not spike-chasing. Gear **sensitivity** (lower / default / higher) and thumbs write **local** files only — no audio, no cloud:
+**Tuning** is the self-improve path — not hidden: the chrome says **Tune**, +/− flash when you rate the heat, hover tips explain them, and the **gear** opens a Tuning panel (sensitivity: lower / default / higher). Help documents the same. Ratings and sensitivity write **local** files only — no audio, no cloud.
+
+Yellow waits for a **dwell** (~1.2 s of climb) so one emphatic word does not flip the dial. The waveform is slower than a raw block meter (EMA + a longer stride).
 
 - Linux: `~/.config/madlight/prefs.json` and `feedback.jsonl`
 - Windows: `%APPDATA%\madlight\`
@@ -117,11 +119,13 @@ Useful flags:
 | `--backend auto\|soundcard\|parec\|pw-record` | Capture backend |
 | `--rising-rms` `--hot-rms` `--rising-slope` | Thresholds (LED colors stay green / amber / red) |
 
-Pause / kill switch: click the **center circle** (or Space / Escape), tray **Pause — stop listening**, gear / right-click menu, or in `--text` mode type `off` / `pause` / `q` + Enter (or Ctrl+C). Drag the handle (or the card) to move. Help explains colors and that lanes are bands, not speakers.
+Pause / kill switch: click the **center face** (or Space / Escape), tray **Pause — stop listening**, gear / right-click **Tuning…**, or in `--text` mode type `off` / `pause` / `q` + Enter (or Ctrl+C). Drag the handle (or the card) to move. Help explains faces, Tuning, and that the strip is energy — not voices.
 
-### Activity lanes ≠ speakers
+### One energy strip — not voices
 
-The three lines are **frequency bands** (low / mid / high) of the same loopback mix — a local, honest stand-in for concurrent activity. They are **not** speaker diarization, **not** “Person 1/2/3”, and they do not identify who is talking. Real multi-speaker ID is out of scope.
+The bar under the face is a **smoothed speech-energy / waveform** of the same loopback mix. It is **not** speaker diarization, **not** “who is talking,” and it is **not** a fixed set of voice lines.
+
+Optional **band meters** (gear → Tuning → “Show band meters”) split that mix into low / mid / high **frequency bands**. They are still one mix — not “Person 1/2/3”, not a fake 3-speaker view. Real multi-speaker ID is out of scope.
 
 ## Headphone sink monitor
 
@@ -169,10 +173,10 @@ madlight --demo --text
 
 # 3. Synthetic GUI (no meeting):
 madlight --demo --no-tray
-# floating card: grey+mic when silent (still listening); grey+pause when paused;
-# green/amber/red + mic when energy;
-# waveform under the circle; three activity lanes move independently
-# click the center to pause / resume; × closes
+# floating card: grey + 🙂 when silent (still listening); grey + 🤐 when paused;
+# green/amber/red + 🙂/😐/😠 when energy;
+# one waveform under the face (no 3-band “voices” unless you enable them in Tuning)
+# click the center face to pause / resume; Tune +/− rates the heat; × closes
 
 # 4. Real playback through headphones:
 #    play a video locally, default sink = headphones, then:
@@ -203,9 +207,9 @@ Defaults target **2–5 person video calls** on a hot loopback / loud meeting ma
 - 50 ms blocks, 2 s RMS window, 0.6 s slope window, hysteresis via `drop_margin`
 - idle grey uses the same `silence_rms = 0.008` floor as the classifier (smoothed RMS)
 - climb must hold `rise_dwell_seconds = 1.2` before calm→rising; density already integrates over the 2 s window
-- meters: one waveform bar every 3 blocks (~150 ms); activity lanes use EMA 0.16
+- meters: one waveform bar every 6 blocks (~300 ms); incoming RMS uses EMA 0.12; optional band meters use EMA 0.08 (slower than the previous stride-3 / 0.16 defaults)
 
-`--text` prints `rms`, `slope`, and dBFS so you can nudge `--rising-rms` / `--hot-rms` / `--rising-slope`. Quiet Linux headphone mixes may need **lower** flags; a still-hotter Windows loopback may need **higher** ones. The LED stays three heat colors plus dark grey (idle listening vs paused are the same grey, different center glyph).
+`--text` prints `rms`, `slope`, and dBFS so you can nudge `--rising-rms` / `--hot-rms` / `--rising-slope`. Or use **Tune + / −** and gear **Tuning** (sensitivity) on the card. Quiet Linux headphone mixes may need **lower** flags; a still-hotter Windows loopback may need **higher** ones. Idle listening vs paused are the same grey, different faces (🙂 armed vs 🤐 muted).
 
 ## Windows
 
@@ -221,7 +225,7 @@ Loopback gain is often much hotter than a Linux headphone sink (meeting mix near
 madlight --backend soundcard --rising-rms 0.10 --rising-slope 0.16 --hot-rms 0.26 --text
 ```
 
-If the LED never leaves green on a quiet headset mix, lower `--rising-rms` / `--hot-rms` instead. Use `--demo` first if you want to see grey (silence / pause), heat colors, the scrolling level, and the three activity lanes without a meeting. Tray may be missing on some desktops; click or Space still pauses.
+If the LED never leaves green on a quiet headset mix, lower `--rising-rms` / `--hot-rms` instead — or open **Tuning** and pick **Higher** sensitivity. Use `--demo` first if you want to see grey (silence / pause), heat colors, faces, and the energy strip without a meeting. Tray may be missing on some desktops; click the face (or Space) still pauses.
 
 ## PyInstaller (optional)
 
@@ -245,4 +249,4 @@ You still need system `libpulse` / PipeWire on the target machine. This is a not
 
 ## Out of scope (v0)
 
-Whisper / ASR, speaker ID / diarization (activity lanes are frequency bands, not people), talk-over detection, Point faces, cloud APIs, auto-update, signed installers, writing meeting audio to disk. Talk-over as a **local feature** is a v1 idea, not this release.
+Whisper / ASR, speaker ID / diarization (the waveform and optional band meters are energy / frequency, not people), talk-over detection, Point faces, cloud APIs, auto-update, signed installers, writing meeting audio to disk. Talk-over as a **local feature** is a v1 idea, not this release.

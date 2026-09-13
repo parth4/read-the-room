@@ -1,4 +1,4 @@
-"""Floating card stays compact; idle/pause paint grey, not calm-green."""
+"""Floating card: faces, pause toggle, compact default (no fake voice bars)."""
 
 from __future__ import annotations
 
@@ -9,28 +9,37 @@ import pytest
 from madlight.heat import HeatLevel, LANE_LABELS
 from madlight.ui import (
     CARD_EDGE,
-    ICON_DIM,
+    CENTER_HIT_PAD,
     DOT_PX,
+    FACE_CALM,
+    FACE_HOT,
+    FACE_PAUSED,
+    FACE_RISING,
+    ICON_DIM,
     LANE_COUNT,
     MARK_ON_GRAY,
     MARK_ON_HEAT,
     PALETTE,
+    TOGGLE_DEBOUNCE_S,
     WIN_H,
+    WIN_H_BANDS,
     WIN_W,
-    center_mark,
+    accept_toggle,
     center_mark_fill,
     center_ring,
     center_xy,
+    face_for,
     led_fill,
     meter_unit,
 )
 
 
-def test_panel_is_compact_card() -> None:
+def test_panel_is_compact_card_without_band_meters() -> None:
     assert 36 <= DOT_PX <= 56
     assert 180 <= WIN_W <= 260
-    assert 90 <= WIN_H <= 150
-    assert LANE_COUNT == 3
+    assert 90 <= WIN_H <= 120
+    assert WIN_H < WIN_H_BANDS
+    assert LANE_COUNT == 3  # optional gear path only — not the default card
 
 
 def test_palette_has_three_heats_and_off() -> None:
@@ -51,15 +60,32 @@ def test_led_fill_idle_and_paused_are_gray() -> None:
     assert led_fill(listening=True, idle=False, level=HeatLevel.HOT) == PALETTE[HeatLevel.HOT]
 
 
-def test_center_mark_splits_pause_from_listen() -> None:
-    assert center_mark(listening=False) == "pause"
-    assert center_mark(listening=True) == "mic"
+def test_face_for_maps_listen_heat_and_pause() -> None:
+    assert face_for(listening=False, idle=True, level=HeatLevel.HOT) == FACE_PAUSED
+    assert face_for(listening=False, idle=False, level=HeatLevel.CALM) == FACE_PAUSED
+    assert face_for(listening=True, idle=True, level=HeatLevel.CALM) == FACE_CALM
+    assert face_for(listening=True, idle=True, level=HeatLevel.HOT) == FACE_CALM
+    assert face_for(listening=True, idle=False, level=HeatLevel.CALM) == FACE_CALM
+    assert face_for(listening=True, idle=False, level=HeatLevel.RISING) == FACE_RISING
+    assert face_for(listening=True, idle=False, level=HeatLevel.HOT) == FACE_HOT
+    assert FACE_RISING == "😐"
+    assert FACE_PAUSED == "🤐"
+    assert FACE_CALM != FACE_PAUSED
+
+
+def test_center_ink_and_ring() -> None:
     assert center_mark_fill(listening=False, idle=True) == MARK_ON_GRAY
     assert center_mark_fill(listening=True, idle=True) == MARK_ON_GRAY
     assert center_mark_fill(listening=True, idle=False) == MARK_ON_HEAT
     assert center_ring(listening=False, idle=True, level=HeatLevel.HOT) == CARD_EDGE
     assert center_ring(listening=True, idle=True, level=HeatLevel.CALM) == ICON_DIM
     assert center_ring(listening=True, idle=False, level=HeatLevel.HOT) == PALETTE[HeatLevel.HOT]
+
+
+def test_accept_toggle_debounces_double_binds() -> None:
+    assert TOGGLE_DEBOUNCE_S >= 0.15
+    assert accept_toggle(1.0, 1.05) is False
+    assert accept_toggle(1.0, 1.0 + TOGGLE_DEBOUNCE_S + 1e-9) is True
 
 
 def test_lane_ui_labels_are_not_speakers() -> None:
@@ -73,8 +99,17 @@ def test_meter_unit_clips() -> None:
     assert meter_unit(0.2, 0.0) == 0.0
 
 
+def _click(win, x: int, y: int) -> None:
+    """Drive the same canvas press/release path a real pointer uses."""
+    rx = win.root.winfo_rootx() + x
+    ry = win.root.winfo_rooty() + y
+    win._canvas.event_generate("<ButtonPress-1>", x=x, y=y, rootx=rx, rooty=ry)
+    win._canvas.event_generate("<ButtonRelease-1>", x=x, y=y, rootx=rx, rooty=ry)
+    win.root.update()
+
+
 @pytest.mark.skipif(not os.environ.get("DISPLAY"), reason="no display")
-def test_dot_window_paints_and_chrome_hits() -> None:
+def test_dot_window_paints_faces_and_center_toggles() -> None:
     from madlight.ui import DotWindow
 
     hits: list[str] = []
@@ -85,8 +120,9 @@ def test_dot_window_paints_and_chrome_hits() -> None:
         win.root.update_idletasks()
         assert win._canvas.itemcget(win._led, "fill") == PALETTE["off"]
         assert win._canvas.itemcget(win._led_ring, "outline") == ICON_DIM
-        assert win._canvas.itemcget(win._pause_a, "state") == "hidden"
-        assert win._canvas.itemcget(win._mic_head, "state") == "normal"
+        assert win._canvas.itemcget(win._face, "text") == FACE_CALM
+        assert win._canvas.itemcget(win._lane_fill[0], "state") == "hidden"
+
         win.set_state(
             HeatLevel.HOT,
             True,
@@ -96,79 +132,108 @@ def test_dot_window_paints_and_chrome_hits() -> None:
         )
         win.root.update_idletasks()
         assert win._canvas.itemcget(win._led, "fill") == PALETTE[HeatLevel.HOT]
-        assert win._canvas.itemcget(win._mic_head, "state") == "normal"
-        assert win._canvas.itemcget(win._pause_a, "state") == "hidden"
+        assert win._canvas.itemcget(win._face, "text") == FACE_HOT
+
+        win.set_state(HeatLevel.RISING, True, idle=False, wave=[0.1] * 8)
+        win.root.update_idletasks()
+        assert win._canvas.itemcget(win._face, "text") == FACE_RISING
+
         win.set_state(HeatLevel.HOT, False, idle=True, wave=[0.2] * 28, lanes=(0.1, 0.1, 0.1))
         win.root.update_idletasks()
         assert win._canvas.itemcget(win._led, "fill") == PALETTE["off"]
         assert win._canvas.itemcget(win._led_ring, "outline") == CARD_EDGE
-        assert win._canvas.itemcget(win._pause_a, "state") == "normal"
-        assert win._canvas.itemcget(win._mic_head, "state") == "hidden"
+        assert win._canvas.itemcget(win._face, "text") == FACE_PAUSED
 
-        assert win.hit_test(8, 8) == "up"
-        assert win.hit_test(28, 8) == "down"
-        assert win.hit_test(50, 8) == "card"
+        assert win.hit_test(8, 8) == "tune"
+        assert win.hit_test(46, 8) == "up"
+        assert win.hit_test(64, 8) == "down"
+        assert win.hit_test(80, 8) == "card"
         assert win.hit_test(WIN_W // 2, 10) == "handle"
         assert win.hit_test(WIN_W - 8, 10) == "close"
         cx, cy = center_xy()
         assert win.hit_test(cx, cy) == "center"
+        assert win.hit_test(cx + DOT_PX // 2, cy) == "center"
+        assert win.hit_test(cx + DOT_PX // 2 + CENTER_HIT_PAD - 1, cy) == "center"
         assert win.hit_test(28, cy) == "gear"
         assert win.hit_test(WIN_W - 28, cy) == "help"
 
         marks: list[str] = []
         win._on_feedback = marks.append
         win.root.update()
-        win.root.event_generate(
-            "<ButtonPress-1>",
-            x=8,
-            y=8,
-            rootx=win.root.winfo_rootx() + 8,
-            rooty=win.root.winfo_rooty() + 8,
-        )
-        win.root.event_generate(
-            "<ButtonRelease-1>",
-            x=8,
-            y=8,
-            rootx=win.root.winfo_rootx() + 8,
-            rooty=win.root.winfo_rooty() + 8,
-        )
-        win.root.update()
+        _click(win, 46, 8)
         assert marks == ["up"]
 
-        win.root.update()
+        win._last_toggle = -1.0
+        _click(win, cx, cy)
+        assert hits == ["toggle"]
+        assert win._canvas.itemcget(win._face, "text") == FACE_CALM  # press flipped pause→listen
+
+        hits.clear()
+        win._last_toggle = -1.0
+        _click(win, cx, cy)
+        assert hits == ["toggle"]
+        assert win._canvas.itemcget(win._face, "text") == FACE_PAUSED
+        assert win._canvas.itemcget(win._wave_items[0], "fill") == "#3F3F3F"
+
+        # Hold/release must not toggle a second time (debounce + click latch).
+        hits.clear()
+        win._last_toggle = -1.0
         rx = win.root.winfo_rootx() + cx
         ry = win.root.winfo_rooty() + cy
-        win.root.event_generate("<ButtonPress-1>", x=cx, y=cy, rootx=rx, rooty=ry)
-        win.root.event_generate("<ButtonRelease-1>", x=cx, y=cy, rootx=rx, rooty=ry)
+        win._canvas.event_generate("<ButtonPress-1>", x=cx, y=cy, rootx=rx, rooty=ry)
         win.root.update()
+        assert hits == ["toggle"]
+        win._canvas.event_generate("<ButtonRelease-1>", x=cx, y=cy, rootx=rx, rooty=ry)
+        win.root.update()
+        assert hits == ["toggle"]
+
+        # Drag jitter after a center press still counts as one toggle.
+        hits.clear()
+        win._last_toggle = -1.0
+        win._canvas.event_generate("<ButtonPress-1>", x=cx, y=cy, rootx=rx, rooty=ry)
+        win._moved = True
+        win._canvas.event_generate("<ButtonRelease-1>", x=cx + 20, y=cy + 12, rootx=rx + 20, rooty=ry + 12)
+        win.root.update()
+        assert hits == ["toggle"]
+
+        # Double-delivered press (root+canvas) is still one toggle.
+        hits.clear()
+        win._last_toggle = -1.0
+        assert win.toggle_listen() is True
+        assert win.toggle_listen() is False
         assert hits == ["toggle"]
 
         hits.clear()
         hx, hy = WIN_W // 2, 10
-        win.root.event_generate(
-            "<ButtonPress-1>", x=hx, y=hy, rootx=win.root.winfo_rootx() + hx, rooty=win.root.winfo_rooty() + hy
-        )
-        win.root.event_generate(
-            "<ButtonRelease-1>", x=hx, y=hy, rootx=win.root.winfo_rootx() + hx, rooty=win.root.winfo_rooty() + hy
-        )
-        win.root.update()
+        _click(win, hx, hy)
         assert hits == []
 
-        win.root.event_generate(
-            "<ButtonPress-1>",
-            x=WIN_W - 8,
-            y=10,
-            rootx=win.root.winfo_rootx() + WIN_W - 8,
-            rooty=win.root.winfo_rooty() + 10,
-        )
-        win.root.event_generate(
-            "<ButtonRelease-1>",
-            x=WIN_W - 8,
-            y=10,
-            rootx=win.root.winfo_rootx() + WIN_W - 8,
-            rooty=win.root.winfo_rooty() + 10,
-        )
-        win.root.update()
+        _click(win, WIN_W - 8, 10)
         assert quits == ["quit"]
+    finally:
+        win.destroy()
+
+
+@pytest.mark.skipif(not os.environ.get("DISPLAY"), reason="no display")
+def test_band_meters_are_opt_in() -> None:
+    from madlight.ui import DotWindow
+
+    shown: list[bool] = []
+    win = DotWindow(
+        on_off=lambda: None,
+        on_quit=lambda: None,
+        get_show_bands=lambda: False,
+        on_show_bands=shown.append,
+    )
+    try:
+        win.root.update_idletasks()
+        assert win._canvas.itemcget(win._lane_fill[0], "state") == "hidden"
+        assert win._canvas.winfo_height() == WIN_H
+        win._set_show_bands(True)
+        win.root.update_idletasks()
+        assert shown == [True]
+        assert win._canvas.itemcget(win._lane_fill[0], "state") == "normal"
+        assert win._canvas.itemcget(win._band_caption, "text") == "bands · not voices"
+        assert win._canvas.winfo_height() == WIN_H_BANDS
     finally:
         win.destroy()

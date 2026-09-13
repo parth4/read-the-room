@@ -56,6 +56,7 @@ class Prefs:
     sensitivity: float = 1.0
     down_too_hot: int = 0
     down_too_cold: int = 0
+    show_band_meters: bool = False
 
     def sensitivity_name(self) -> str:
         best = "default"
@@ -88,6 +89,7 @@ def load_prefs(root: Path | None = None) -> Prefs:
         sensitivity=float(data.get("sensitivity") or 1.0),
         down_too_hot=int(data.get("down_too_hot") or 0),
         down_too_cold=int(data.get("down_too_cold") or 0),
+        show_band_meters=bool(data.get("show_band_meters", False)),
     )
 
 

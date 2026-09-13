@@ -51,9 +51,11 @@ class HeatConfig:
     rise_dwell_seconds: float = 1.2
     density_dwell_seconds: float = 0.15
     hot_dwell_seconds: float = 0.45
-    # Card meters: append a wave bar every N blocks; EMA the lanes.
-    meter_stride: int = 3
-    lane_ema: float = 0.16
+    # Card meters: slower than PR #6 (stride 3 / lane EMA 0.16).
+    # Lower EMA alpha = heavier history = the strip eases instead of ticking.
+    meter_stride: int = 6
+    lane_ema: float = 0.08
+    wave_ema: float = 0.12
 
     @property
     def block_frames(self) -> int:
@@ -223,31 +225,36 @@ def ema(prev: float, new: float, alpha: float) -> float:
 
 
 class MeterSmoother:
-    """Slow the card meters: one wave bar every N blocks, EMA on lanes."""
+    """Slow the card meters: EMA the incoming RMS, one bar every N blocks, EMA lanes."""
 
     def __init__(
         self,
         *,
         bars: int = 28,
-        stride: int = 3,
-        lane_alpha: float = 0.16,
+        stride: int = 6,
+        lane_alpha: float = 0.08,
+        wave_alpha: float = 0.12,
     ) -> None:
         self.bars = max(1, bars)
         self.stride = max(1, stride)
         self.lane_alpha = float(lane_alpha)
+        self.wave_alpha = float(wave_alpha)
         self.wave = [0.0] * self.bars
         self.lanes: tuple[float, float, float] = (0.0, 0.0, 0.0)
+        self._smooth = 0.0
         self._acc: list[float] = []
 
     def reset(self) -> None:
         self.wave = [0.0] * self.bars
         self.lanes = (0.0, 0.0, 0.0)
+        self._smooth = 0.0
         self._acc = []
 
     def push(
         self, rms: float, lanes: tuple[float, ...]
     ) -> tuple[list[float], tuple[float, float, float]]:
-        self._acc.append(float(max(0.0, rms)))
+        self._smooth = ema(self._smooth, float(max(0.0, rms)), self.wave_alpha)
+        self._acc.append(self._smooth)
         if len(self._acc) >= self.stride:
             avg = sum(self._acc) / len(self._acc)
             self._acc.clear()

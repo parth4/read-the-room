@@ -104,6 +104,7 @@ class Runtime:
             self.config = cfg
             self.meter.stride = max(1, cfg.meter_stride)
             self.meter.lane_alpha = cfg.lane_ema
+            self.meter.wave_alpha = cfg.wave_ema
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -333,6 +334,11 @@ def _run_gui(runtime: Runtime, *, dot: bool, tray: bool) -> bool:
         save_prefs(prefs)
         runtime.apply_config(apply_prefs(HeatConfig(), prefs))
 
+    def on_show_bands(value: bool) -> None:
+        prefs = load_prefs()
+        prefs.show_band_meters = bool(value)
+        save_prefs(prefs)
+
     if dot:
         try:
             from madlight.ui import DotWindow
@@ -343,6 +349,8 @@ def _run_gui(runtime: Runtime, *, dot: bool, tray: bool) -> bool:
                 on_feedback=on_feedback,
                 on_sensitivity=on_sensitivity,
                 get_sensitivity=lambda: load_prefs().sensitivity_name(),
+                on_show_bands=on_show_bands,
+                get_show_bands=lambda: load_prefs().show_band_meters,
             )
         except Exception as exc:
             print(f"LED unavailable ({exc})", file=sys.stderr)

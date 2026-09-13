@@ -172,7 +172,7 @@ def test_sustained_climb_becomes_rising() -> None:
 
 
 def test_meter_smoother_strides_wave_and_emas_lanes() -> None:
-    meter = MeterSmoother(bars=8, stride=3, lane_alpha=0.5)
+    meter = MeterSmoother(bars=8, stride=3, lane_alpha=0.5, wave_alpha=1.0)
     wave, lanes = meter.push(0.09, (0.2, 0.0, 0.0))
     assert wave[-1] == 0.0
     assert lanes[0] == pytest.approx(0.1)
@@ -181,6 +181,16 @@ def test_meter_smoother_strides_wave_and_emas_lanes() -> None:
     wave, _ = meter.push(0.09, (0.2, 0.0, 0.0))
     assert wave[-1] == pytest.approx(0.09)
     assert ema(0.0, 1.0, 0.25) == pytest.approx(0.25)
+
+
+def test_meter_defaults_are_slower_than_pr6() -> None:
+    cfg = HeatConfig()
+    assert cfg.meter_stride >= 6
+    assert cfg.lane_ema <= 0.08
+    assert cfg.wave_ema <= 0.12
+    meter = MeterSmoother()
+    assert meter.stride == 6
+    assert meter.lane_alpha == pytest.approx(0.08)
 
 
 def test_slope_positive_on_linear_ramp() -> None:
