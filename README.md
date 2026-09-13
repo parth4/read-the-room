@@ -225,4 +225,4 @@ You still need system `libpulse` / PipeWire on the target machine. This is a not
 
 ## Out of scope (v0)
 
-Whisper / ASR, speaker ID, talk-over detection, Point faces, cloud APIs, auto-update, signed installers, writing meeting audio to disk. Talk-over as a **local feature** is a v1 idea, not this release.
+Whisper / ASR, speaker ID / diarization (activity lanes are frequency bands, not people), talk-over detection, Point faces, cloud APIs, auto-update, signed installers, writing meeting audio to disk. Talk-over as a **local feature** is a v1 idea, not this release.
