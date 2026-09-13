@@ -330,7 +330,7 @@ def _demo_amplitude(t: float) -> float:
 
 
 def _demo_band_weights(t: float) -> tuple[float, float, float]:
-    """Independent LFOs so the three activity lanes do not move as one blob."""
+    """Independent LFOs so optional band meters do not move as one blob."""
     lo = 0.12 + 0.88 * (0.5 + 0.5 * math.sin(2.0 * math.pi * 0.28 * t))
     mid = 0.12 + 0.88 * (0.5 + 0.5 * math.sin(2.0 * math.pi * 0.47 * t + 2.1))
     hi = 0.12 + 0.88 * (0.5 + 0.5 * math.sin(2.0 * math.pi * 0.71 * t + 4.0))

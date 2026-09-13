@@ -22,12 +22,18 @@ def test_config_dir_honors_env(tmp_path, monkeypatch) -> None:
 
 
 def test_prefs_roundtrip(tmp_path) -> None:
-    prefs = Prefs(rising_rms=0.07, hot_rms=0.20, sensitivity=1.35)
+    prefs = Prefs(rising_rms=0.07, hot_rms=0.20, sensitivity=1.35, show_band_meters=True)
     save_prefs(prefs, tmp_path)
     loaded = load_prefs(tmp_path)
     assert loaded.rising_rms == 0.07
     assert loaded.hot_rms == 0.20
     assert loaded.sensitivity_name() == "higher"
+    assert loaded.show_band_meters is True
+
+
+def test_band_meters_default_off(tmp_path) -> None:
+    loaded = load_prefs(tmp_path)
+    assert loaded.show_band_meters is False
 
 
 def test_missing_prefs_are_defaults(tmp_path) -> None:
