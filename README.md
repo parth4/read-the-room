@@ -6,13 +6,26 @@ While a meeting plays on this machine (Zoom, Teams, a browser tab), Mad Light wa
 
 It is **not** a dashboard, **not** a labeled pill, **not** an emotion detector, **not** face reading, **not** a transcript, and it does not call a cloud API.
 
-This tree is **v0 only** — the atmosphere dial. Later local stacking cues, facilitator prompts, dual opt-in guides, and optional app hooks are sketched in **[ROADMAP.md](ROADMAP.md)**. They are not implemented here.
+This tree is **v0 only** — the atmosphere dial. The **clarity / facilitator** work (“point landed?”, reframe, a tiny commandments-style framework) is **v2+** in **[ROADMAP.md](ROADMAP.md)**. It is not implemented here. Rebuild v0 from **[SPEC.md](SPEC.md)**.
 
 License: [MIT](LICENSE). README is written so the repo can go public later; that timing is undecided.
 
 UI ancestor: [The Point](https://github.com/parth4/point-overlay) is inspiration only. This repo does not copy that YouTube / manual engine.
 
 The git slug may stay `mad-lite`; the product and Python package are **Mad Light** / `madlight`.
+
+## Who it’s for
+
+These are the north-star uses. They are why the light exists. **v0 still only shows heat.**
+
+**Accessibility / neurodiversity-minded.** A simple **non-verbal ambient cue** when conversation heat rises, or when an ask is not landing — glanceable, no transcript to parse. **Not a medical device.** No diagnosis, no “detects ADHD / autism / anxiety,” no clinical claims.
+
+**Executive / cryptic meetings** (personal use case). When an ask is restated and still does not land, the later product should cue a **reframe** (say it differently; check understanding). That facilitator behavior is the **v2+ arc**, not this release. Today the LED only moves with **energy**.
+
+## How you get it
+
+1. **Runnable local app** — this repo, **Omarchy / Linux first**. Install, run `madlight`, watch the default-sink monitor. One green / amber / red **dot**.
+2. **Spec for another agent** — give a coding agent **[SPEC.md](SPEC.md)** (“build Mad Light to this spec”). Optionally add [`.cursor/skills/mad-light/SKILL.md`](.cursor/skills/mad-light/SKILL.md). The expected result is a faithful **local dial + recording-indicator dot**, not the roadmap’s coach features.
 
 ## What it does
 
@@ -175,10 +188,10 @@ You still need system `libpulse` / PipeWire on the target machine. This is a not
 
 ## Roadmap
 
-**This repo is v0** (the heat LED). The rest is intent only — [ROADMAP.md](ROADMAP.md):
+**This repo is v0** (the heat LED). Intent only — [ROADMAP.md](ROADMAP.md):
 
 1. Stacking / interrupt **signals** from local audio (still no transcript)
-2. “Point landed?” / reframe cues and a tiny coach framework — not a note-taker
+2. **Clarity / facilitator arc:** “point landed?” / reframe + a tiny commandments-style coach — not a note-taker
 3. Dual local guides, both sides opt in
 4. Skills / hooks so other apps **may** adopt; we do not claim Zoom or Teams will
 
