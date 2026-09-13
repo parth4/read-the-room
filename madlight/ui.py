@@ -9,15 +9,17 @@ from typing import Any
 
 from PIL import Image
 
-from madlight.draw import aa_disc, aa_gear, aa_help
+from madlight.draw import aa_disc, aa_gear, aa_help, compose_center
 from madlight.faces import (
     FACE_CALM,
     FACE_HOT,
-    FACE_PAUSED,
     FACE_PX,
     FACE_RISING,
+    HEADPHONE_ON,
     face_for,
+    headphone_for,
     load_face_image,
+    load_headphone_image,
 )
 from madlight.heat import HeatLevel
 
@@ -78,14 +80,15 @@ WAVE_DIM = "#3F3F3F"
 
 HELP_TEXT = (
     "Mad Light — meeting heat from the local loopback mix.\n\n"
-    "Center face: click to pause / resume listening.\n"
-    "  😊 calm (or silence — still listening)\n"
+    "Center: click to pause / resume listening.\n"
+    "  🎧 on the circle = listening (the dial is hearing the mix)\n"
+    "  🎧 down / off = paused (not listening)\n"
+    "  🙂 calm (or silence — still listening)\n"
     "  😬 rising — energy climbing\n"
-    "  😡 hot\n"
-    "  🤐 paused — not listening\n\n"
+    "  😡 hot\n\n"
     "Circle color follows heat while listening.\n"
-    "Paused = dark gray + muted face.\n"
-    "Silence while listening stays the calm face on gray (armed).\n\n"
+    "Paused = dark gray + headphones set aside.\n"
+    "Silence while listening keeps 🙂 + headphones on (armed).\n\n"
     "Tuning: the Tune + / − marks mean this heat feels right / wrong\n"
     "(local log only). Gear opens Tuning — sensitivity is the\n"
     "self-improve path. Space also pauses / resumes.\n\n"
@@ -258,12 +261,15 @@ class DotWindow:
         self._side_help = WIN_W - 28
         self._draw_chrome_icons(cx, cy)
 
+        self._center_photos: dict[tuple[str, str, str | None, bool], Any] = {}
+        self._disc_photos: dict[tuple[str, str], Any] = {}
         self._led_photos: dict[tuple[str, str], Any] = {}
         self._led_fill = PALETTE["off"]
         self._led_ring_color = ICON_DIM
         self._led = self._canvas.create_image(cx, cy, tags=("center", "led"))
         self._face_photos: dict[str, Any] = {}
-        self._face_glyph = FACE_CALM
+        self._face_glyph: str | None = FACE_CALM
+        self._phones_mode = HEADPHONE_ON
         self._fallback_items: list[int] = []
         self._face = self._canvas.create_image(cx, cy, tags=("center", "face"))
         self._apply_circle()
@@ -345,11 +351,70 @@ class DotWindow:
         self._face_photos[glyph] = photo
         return photo
 
-    def _draw_fallback_face(self, glyph: str, color: str) -> None:
+    def _load_center_photo(self, fill: str, ring: str, glyph: str | None, listening: bool) -> Any | None:
+        key = (fill, ring, glyph, listening)
+        cached = self._center_photos.get(key)
+        if cached is not None:
+            return cached
+        face = load_face_image(glyph, FACE_PX) if glyph else None
+        phones = load_headphone_image(listening)
+        if phones is None:
+            return None
+        if listening and face is None:
+            return None
+        disc = aa_disc(CIRCLE_IMG_PX, fill, outline=ring, outline_width=2)
+        img = compose_center(disc, face=face, headphones=phones, listening=listening)
+        try:
+            from PIL import ImageTk
+
+            photo = ImageTk.PhotoImage(img, master=self.root)
+        except Exception:
+            return None
+        self._center_photos[key] = photo
+        return photo
+
+    def _draw_fallback_headphones(self, listening: bool, color: str) -> None:
+        cx, cy = center_xy()
+        if listening:
+            # Cans on: band over the head + ear cups.
+            self._fallback_items.append(
+                self._canvas.create_arc(
+                    cx - 14, cy - 16, cx + 14, cy + 2,
+                    start=0, extent=180, style="arc", outline=color, width=2, tags=("center",),
+                )
+            )
+            for sx in (-13, 13):
+                self._fallback_items.append(
+                    self._canvas.create_oval(
+                        cx + sx - 4, cy - 4, cx + sx + 4, cy + 6,
+                        outline=color, width=2, tags=("center",),
+                    )
+                )
+            return
+        # Cans off / set aside: smaller headset in the middle of the grey disc.
+        self._fallback_items.append(
+            self._canvas.create_arc(
+                cx - 10, cy - 8, cx + 10, cy + 8,
+                start=20, extent=140, style="arc", outline=color, width=2, tags=("center",),
+            )
+        )
+        for sx in (-9, 9):
+            self._fallback_items.append(
+                self._canvas.create_oval(
+                    cx + sx - 3, cy - 1, cx + sx + 3, cy + 7,
+                    outline=color, width=2, tags=("center",),
+                )
+            )
+
+    def _draw_fallback_face(self, glyph: str | None, color: str, listening: bool) -> None:
         for item in self._fallback_items:
             self._canvas.delete(item)
         self._fallback_items = []
         cx, cy = center_xy()
+        if not listening or glyph is None:
+            self._draw_fallback_headphones(False, color)
+            return
+        self._draw_fallback_headphones(True, color)
         eyes = ((cx - 6, cy - 4), (cx + 6, cy - 4))
         for ex, ey in eyes:
             self._fallback_items.append(
@@ -357,19 +422,7 @@ class DotWindow:
                     ex - 1.6, ey - 1.6, ex + 1.6, ey + 1.6, fill=color, outline="", tags=("center",)
                 )
             )
-        if glyph == FACE_PAUSED:
-            self._fallback_items.append(
-                self._canvas.create_line(
-                    cx - 7, cy + 6, cx + 7, cy + 6, fill=color, width=2, tags=("center",)
-                )
-            )
-            for t in (-4, 0, 4):
-                self._fallback_items.append(
-                    self._canvas.create_line(
-                        cx + t, cy + 3, cx + t, cy + 9, fill=color, width=1, tags=("center",)
-                    )
-                )
-        elif glyph == FACE_HOT:
+        if glyph == FACE_HOT:
             self._fallback_items.append(
                 self._canvas.create_line(cx - 8, cy - 9, cx - 3, cy - 6, fill=color, width=2, tags=("center",))
             )
@@ -397,17 +450,24 @@ class DotWindow:
                 )
             )
 
-    def _paint_face(self, glyph: str, ink: str) -> None:
+    def _clear_fallback(self) -> None:
+        for item in self._fallback_items:
+            self._canvas.delete(item)
+        self._fallback_items = []
+
+    def _paint_face(self, glyph: str | None, ink: str, listening: bool) -> None:
         self._face_glyph = glyph
+        if glyph is None:
+            self._canvas.itemconfig(self._face, state="hidden")
+            self._draw_fallback_face(None, ink, listening)
+            return
         photo = self._load_face_photo(glyph)
         if photo is not None:
             self._canvas.itemconfig(self._face, image=photo, state="normal")
-            for item in self._fallback_items:
-                self._canvas.delete(item)
-            self._fallback_items = []
+            self._clear_fallback()
             return
         self._canvas.itemconfig(self._face, state="hidden")
-        self._draw_fallback_face(glyph, ink)
+        self._draw_fallback_face(glyph, ink, listening)
 
     def _draw_chrome_icons(self, cx: int, cy: int) -> None:
         from PIL import ImageTk
@@ -419,7 +479,7 @@ class DotWindow:
 
     def _load_disc_photo(self, fill: str, ring: str) -> Any | None:
         key = (fill, ring)
-        cached = self._led_photos.get(key)
+        cached = self._disc_photos.get(key)
         if cached is not None:
             return cached
         img = aa_disc(CIRCLE_IMG_PX, fill, outline=ring, outline_width=2)
@@ -429,6 +489,7 @@ class DotWindow:
             photo = ImageTk.PhotoImage(img, master=self.root)
         except Exception:
             return None
+        self._disc_photos[key] = photo
         self._led_photos[key] = photo
         return photo
 
@@ -482,10 +543,19 @@ class DotWindow:
         glyph = face_for(listening=self._listening, idle=self._idle, level=self._level)
         self._led_fill = color
         self._led_ring_color = ring
+        self._face_glyph = glyph
+        self._phones_mode = headphone_for(listening=self._listening)
+        composed = self._load_center_photo(color, ring, glyph, self._listening)
+        if composed is not None:
+            self._canvas.itemconfig(self._led, image=composed, state="normal")
+            self._canvas.itemconfig(self._face, state="hidden")
+            self._clear_fallback()
+            self._led_photos[(color, ring)] = composed
+            return
         photo = self._load_disc_photo(color, ring)
         if photo is not None:
             self._canvas.itemconfig(self._led, image=photo, state="normal")
-        self._paint_face(glyph, ink)
+        self._paint_face(glyph, ink, self._listening)
         self._canvas.tag_raise("face")
 
     def _hover(self, event: Any) -> None:
@@ -502,12 +572,12 @@ class DotWindow:
         except Exception:
             pass
         tips = {
-            "center": "Click to pause / listen",
+            "center": "Click to pause / listen (headphones on / off)",
             "tune": "Tuning — this heat feels right / wrong",
             "up": "Tuning: this heat feels right",
             "down": "Tuning: this heat feels wrong",
             "gear": "Tuning — sensitivity",
-            "help": "What the faces and strip mean",
+            "help": "What the faces, headphones, and strip mean",
         }
         text = tips.get(hit)
         if text:
@@ -625,7 +695,7 @@ class DotWindow:
         menu.add_command(label=pause_label, command=self.toggle_listen)
         menu.add_separator()
         menu.add_command(label="Tuning…", command=self._show_tuning)
-        menu.add_command(label="Help — faces and meters", command=self._show_help)
+        menu.add_command(label="Help — faces, headphones, and meters", command=self._show_help)
         menu.add_separator()
         menu.add_command(label="Quit", command=self._on_quit)
         try:

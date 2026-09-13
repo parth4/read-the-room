@@ -104,12 +104,36 @@ def aa_help(size: int, color: str, scale: int = AA_SCALE) -> Image.Image:
     return img.resize((size, size), Image.Resampling.LANCZOS)
 
 
+def paste_at(base: Image.Image, overlay: Image.Image, xy: tuple[int, int]) -> Image.Image:
+    """Alpha-composite `overlay` at `xy` (copy)."""
+    out = base.copy()
+    out.alpha_composite(overlay, xy)
+    return out
+
+
 def paste_centered(base: Image.Image, overlay: Image.Image) -> Image.Image:
     """Alpha-composite `overlay` in the middle of `base` (copy)."""
-    out = base.copy()
-    x = (out.width - overlay.width) // 2
-    y = (out.height - overlay.height) // 2
-    out.alpha_composite(overlay, (x, y))
+    x = (base.width - overlay.width) // 2
+    y = (base.height - overlay.height) // 2
+    return paste_at(base, overlay, (x, y))
+
+
+def compose_center(
+    disc: Image.Image,
+    *,
+    face: Image.Image | None,
+    headphones: Image.Image | None,
+    listening: bool,
+) -> Image.Image:
+    """AA disc + worn headphones behind the face, or set-aside cans when paused."""
+    out = disc.copy()
+    if listening and headphones is not None:
+        x = (out.width - headphones.width) // 2
+        out.alpha_composite(headphones, (x, 1))
+    if face is not None:
+        out = paste_centered(out, face)
+    elif headphones is not None and not listening:
+        out = paste_centered(out, headphones)
     return out
 
 

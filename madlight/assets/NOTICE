@@ -6,9 +6,16 @@ https://github.com/twitter/twemoji
 Graphics licensed under Creative Commons Attribution 4.0 International (CC-BY 4.0):
 https://creativecommons.org/licenses/by/4.0/
 
-Bundled 72×72 PNGs from Twemoji 15.1.0 (renamed for the heat states):
+Bundled 72×72 PNGs from Twemoji 15.1.0 (renamed for the heat / listen states):
 
-  1f60a.png  😊  smiling face with smiling eyes  →  faces/calm.png
+  1f642.png  🙂  slightly smiling face           →  faces/calm.png
   1f62c.png  😬  grimacing face                  →  faces/rising.png
   1f621.png  😡  pouting face                    →  faces/hot.png
-  1f910.png  🤐  zipper-mouth face               →  faces/paused.png
+  1f3a7.png  🎧  headphone                       →  headphones/on.png
+
+headphones/off.png is a dimmed copy of 1f3a7 (cans set aside — not listening).
+It is not a separate Twemoji glyph.
+
+Calm is the simple slightly-smiling face (no blush). Blushy / laughing faces
+are not the baseline. Listen vs pause is headphones on (worn on the circle)
+vs headphones off (set down on the grey disc).
