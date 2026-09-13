@@ -70,7 +70,9 @@ Hard rules to keep:
 - Local-first; if anything leaves the machine, it is a later, named choice — not a silent default.
 - Either party can kill their guide without affecting the other’s Off switch.
 
-**Same era (~v3), optional, local only:** thumbs up / down on a recent cue so Mad Light can **nudge its own thresholds / sensitivity on-device** (this headset is quieter; that room is always “hot”). Ratings and the resulting numbers stay on the machine. **Not cloud retraining**, not a model upload, not a dataset leaving the box. **Do not put this on the v0 LED.**
+**Same era (~v3), optional, local only:** thumbs up / down on a recent cue so Mad Light can **nudge its own thresholds / sensitivity on-device** (this headset is quieter; that room is always “hot”). Ratings and the resulting numbers stay on the machine. **Not cloud retraining**, not a model upload, not a dataset leaving the box.
+
+A **lite** slice of this (card + / −, `prefs.json`, `feedback.jsonl`, a tiny on-device nudge after repeated downs) shipped on the floating card. It is still local-only and is not the dual-guide product.
 
 ## v4 — Skills / hooks (others may adopt)
 

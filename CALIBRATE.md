@@ -2,7 +2,7 @@
 
 Offline, local, **not** neural training and **not** the cloud. You label short clips; Mad Light scores the **same** `HeatConfig` the LED uses (`madlight/heat.py`) and can **propose CLI flags**.
 
-The v0 LED UI does not change. Live mic/monitor capture stays **absolute RMS**. No thumbs-up on the pip.
+Live mic/monitor capture stays **absolute RMS**. The card can take **thumbs + / −** (heat feels right / wrong). Those ratings append to a **local** `feedback.jsonl` under the user config dir (see README). They are not uploaded and are not a training set. `madlight calibrate --from-feedback` is a later idea, not this critic.
 
 ## Priority fixture: crosstalk
 

@@ -10,9 +10,11 @@ from madlight.heat import (
     HeatClassifier,
     HeatConfig,
     HeatLevel,
+    MeterSmoother,
     block_rms,
     classify_heat,
     db_fs,
+    ema,
 )
 from madlight.synth import render_synth
 
@@ -121,14 +123,14 @@ def test_classifier_quiet_stream_stays_calm() -> None:
 def test_classifier_step_up_becomes_hot() -> None:
     clf = HeatClassifier(CFG)
     _feed(clf, [0.002] * 20)
-    level = _feed(clf, [0.30] * 16)
+    level = _feed(clf, [0.30] * 20)
     assert level is HeatLevel.HOT
 
 
 def test_classifier_ramp_reports_rising_before_hot() -> None:
     clf = HeatClassifier(CFG)
     _feed(clf, [0.01] * 8)
-    start, end, n = 0.01, 0.16, 16
+    start, end, n = 0.01, 0.20, 48
     ramp = [start + (end - start) * i / (n - 1) for i in range(n)]
     sample = None
     saw_rising = False
@@ -140,6 +142,45 @@ def test_classifier_ramp_reports_rising_before_hot() -> None:
     assert sample is not None
     assert saw_rising
     assert sample.slope > 0
+    assert sample.level is not HeatLevel.HOT
+
+
+def test_brief_climb_spike_stays_calm() -> None:
+    """One emphatic word (~0.3 s climb) must not flip yellow."""
+    clf = HeatClassifier(CFG)
+    _feed(clf, [0.01] * 12)
+    spike = [0.02 + 0.02 * i for i in range(6)]  # 0.3 s
+    level = _feed(clf, spike + [0.012] * 8)
+    assert level is HeatLevel.CALM
+
+
+def test_sustained_climb_becomes_rising() -> None:
+    clf = HeatClassifier(CFG)
+    _feed(clf, [0.01] * 12)
+    # ~2 s of steep climb, well above rise_dwell_seconds.
+    ramp = [0.015 + 0.004 * i for i in range(40)]
+    sample = None
+    first_rising: int | None = None
+    for i, rms in enumerate(ramp):
+        sample = clf.push_rms(rms)
+        if first_rising is None and sample.level is HeatLevel.RISING:
+            first_rising = i
+    assert sample is not None
+    assert sample.level is HeatLevel.RISING
+    assert first_rising is not None
+    assert first_rising * CFG.block_ms >= 800
+
+
+def test_meter_smoother_strides_wave_and_emas_lanes() -> None:
+    meter = MeterSmoother(bars=8, stride=3, lane_alpha=0.5)
+    wave, lanes = meter.push(0.09, (0.2, 0.0, 0.0))
+    assert wave[-1] == 0.0
+    assert lanes[0] == pytest.approx(0.1)
+    wave, _ = meter.push(0.09, (0.2, 0.0, 0.0))
+    assert wave[-1] == 0.0
+    wave, _ = meter.push(0.09, (0.2, 0.0, 0.0))
+    assert wave[-1] == pytest.approx(0.09)
+    assert ema(0.0, 1.0, 0.25) == pytest.approx(0.25)
 
 
 def test_slope_positive_on_linear_ramp() -> None:

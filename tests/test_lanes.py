@@ -84,3 +84,6 @@ def test_heat_classifier_defaults() -> None:
     assert cfg.density_fill == pytest.approx(0.85)
     assert cfg.density_crest_max == pytest.approx(2.0)
     assert cfg.density_cv_min == pytest.approx(0.25)
+    assert cfg.rise_dwell_seconds == pytest.approx(1.2)
+    assert cfg.hot_dwell_seconds == pytest.approx(0.45)
+    assert cfg.meter_stride == 3

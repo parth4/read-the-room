@@ -65,7 +65,9 @@ HELP_TEXT = (
     "Mic = listening (armed). Pause bars = capture off.\n"
     "Green calm · amber rising · red hot.\n"
     "Dark gray + mic = silence, still listening.\n"
-    "Dark gray + pause = paused, not listening.\n\n"
+    "Dark gray + pause = paused, not listening.\n"
+    "+ / − : this heat feels right / wrong (local log only).\n"
+    "Gear: pause, sensitivity, help.\n\n"
     "Activity lanes are low / mid / high frequency bands "
     "of the same mix — not speaker names, not diarization."
 )
@@ -135,12 +137,18 @@ class DotWindow:
         *,
         on_off: Callable[[], None],
         on_quit: Callable[[], None],
+        on_feedback: Callable[[str], None] | None = None,
+        on_sensitivity: Callable[[str], None] | None = None,
+        get_sensitivity: Callable[[], str] | None = None,
     ) -> None:
         import tkinter as tk
 
         self._tk = tk
         self._on_off = on_off
         self._on_quit = on_quit
+        self._on_feedback = on_feedback
+        self._on_sensitivity = on_sensitivity
+        self._get_sensitivity = get_sensitivity or (lambda: "default")
         self._paused = False
         self._help_win: Any = None
         self.root = tk.Tk()
@@ -177,6 +185,12 @@ class DotWindow:
         hx0, hy0 = WIN_W // 2 - 14, 8
         self._handle = self._canvas.create_rectangle(
             hx0, hy0, hx0 + 28, hy0 + 3, fill=HANDLE, outline="", tags=("handle",)
+        )
+        self._up_mark = self._canvas.create_text(
+            12, 10, text="+", fill=ICON, font=("Sans", 12, "bold"), tags=("up",)
+        )
+        self._down_mark = self._canvas.create_text(
+            28, 10, text="−", fill=ICON, font=("Sans", 12, "bold"), tags=("down",)
         )
         self._close_x = WIN_W - 16
         self._close_y = 10
@@ -307,6 +321,8 @@ class DotWindow:
     def _hit_boxes(self) -> dict[str, tuple[int, int, int, int]]:
         return {
             "close": (WIN_W - 28, 0, WIN_W, CHROME_H + 2),
+            "up": (2, 0, 20, CHROME_H + 2),
+            "down": (20, 0, 38, CHROME_H + 2),
             "handle": (WIN_W // 2 - 24, 0, WIN_W // 2 + 24, CHROME_H),
             "gear": (self._side_gear - 12, ROW_CY - 12, self._side_gear + 12, ROW_CY + 12),
             "help": (self._side_help - 12, ROW_CY - 12, self._side_help + 12, ROW_CY + 12),
@@ -314,7 +330,7 @@ class DotWindow:
 
     def hit_test(self, x: float, y: float) -> str:
         boxes = self._hit_boxes()
-        for name in ("close", "gear", "help", "handle"):
+        for name in ("close", "up", "down", "gear", "help", "handle"):
             if _in_rect(x, y, boxes[name]):
                 return name
         cx, cy = center_xy()
@@ -324,7 +340,7 @@ class DotWindow:
 
     def _hover(self, event: Any) -> None:
         hit = self.hit_test(event.x, event.y)
-        cursor = "hand2" if hit in {"center", "close", "gear", "help"} else "fleur" if hit in {"handle", "card"} else "arrow"
+        cursor = "hand2" if hit in {"center", "close", "gear", "help", "up", "down"} else "fleur" if hit in {"handle", "card"} else "arrow"
         try:
             self._canvas.configure(cursor=cursor)
         except Exception:
@@ -364,11 +380,44 @@ class DotWindow:
             self._menu(event)
         elif hit == "help":
             self._show_help()
+        elif hit == "up":
+            self._feedback("up")
+        elif hit == "down":
+            self._feedback("down")
+
+    def _feedback(self, label: str) -> None:
+        if self._on_feedback is None:
+            return
+        mark = self._up_mark if label == "up" else self._down_mark
+        flash = PALETTE[HeatLevel.CALM] if label == "up" else PALETTE[HeatLevel.HOT]
+        try:
+            self._canvas.itemconfig(mark, fill=flash)
+            self.root.after(280, lambda: self._canvas.itemconfig(mark, fill=ICON))
+        except Exception:
+            pass
+        self._on_feedback(label)
 
     def _menu(self, event: Any) -> None:
         menu = self._tk.Menu(self.root, tearoff=0, bg=CARD, fg=ICON, activebackground="#3A3A3A")
         pause_label = "Resume listening" if self._paused else "Pause listening"
         menu.add_command(label=pause_label, command=self._on_off)
+        if self._on_feedback is not None:
+            menu.add_separator()
+            menu.add_command(label="Heat feels right", command=lambda: self._feedback("up"))
+            menu.add_command(label="Heat feels wrong", command=lambda: self._feedback("down"))
+        if self._on_sensitivity is not None:
+            current = self._get_sensitivity()
+            menu.add_separator()
+            for name, title in (
+                ("lower", "Sensitivity: lower"),
+                ("default", "Sensitivity: default"),
+                ("higher", "Sensitivity: higher"),
+            ):
+                mark = "  ✓" if name == current else ""
+                menu.add_command(
+                    label=title + mark,
+                    command=lambda n=name: self._on_sensitivity(n),
+                )
         menu.add_separator()
         menu.add_command(label="Activity lanes: low / mid / high (not speakers)", command=self._show_help)
         menu.add_separator()

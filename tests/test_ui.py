@@ -105,13 +105,35 @@ def test_dot_window_paints_and_chrome_hits() -> None:
         assert win._canvas.itemcget(win._pause_a, "state") == "normal"
         assert win._canvas.itemcget(win._mic_head, "state") == "hidden"
 
-        assert win.hit_test(8, 8) == "card"
+        assert win.hit_test(8, 8) == "up"
+        assert win.hit_test(28, 8) == "down"
+        assert win.hit_test(50, 8) == "card"
         assert win.hit_test(WIN_W // 2, 10) == "handle"
         assert win.hit_test(WIN_W - 8, 10) == "close"
         cx, cy = center_xy()
         assert win.hit_test(cx, cy) == "center"
         assert win.hit_test(28, cy) == "gear"
         assert win.hit_test(WIN_W - 28, cy) == "help"
+
+        marks: list[str] = []
+        win._on_feedback = marks.append
+        win.root.update()
+        win.root.event_generate(
+            "<ButtonPress-1>",
+            x=8,
+            y=8,
+            rootx=win.root.winfo_rootx() + 8,
+            rooty=win.root.winfo_rooty() + 8,
+        )
+        win.root.event_generate(
+            "<ButtonRelease-1>",
+            x=8,
+            y=8,
+            rootx=win.root.winfo_rootx() + 8,
+            rooty=win.root.winfo_rooty() + 8,
+        )
+        win.root.update()
+        assert marks == ["up"]
 
         win.root.update()
         rx = win.root.winfo_rootx() + cx
