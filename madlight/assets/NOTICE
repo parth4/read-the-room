@@ -1,0 +1,14 @@
+Twemoji graphics
+Copyright 2019 Twitter, Inc and other contributors
+https://github.com/jdecked/twemoji
+https://github.com/twitter/twemoji
+
+Graphics licensed under Creative Commons Attribution 4.0 International (CC-BY 4.0):
+https://creativecommons.org/licenses/by/4.0/
+
+Bundled 72×72 PNGs from Twemoji 15.1.0 (renamed for the heat states):
+
+  1f642.png  🙂  slightly smiling face  →  faces/calm.png
+  1f610.png  😐  neutral face           →  faces/rising.png
+  1f620.png  😠  angry face             →  faces/hot.png
+  1f910.png  🤐  zipper-mouth face      →  faces/paused.png

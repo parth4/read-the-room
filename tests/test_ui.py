@@ -6,15 +6,30 @@ import os
 
 import pytest
 
+try:
+    import tkinter as _tkinter  # noqa: F401
+
+    _HAS_TK = True
+except ModuleNotFoundError:
+    _HAS_TK = False
+
+from madlight.faces import (
+    ASSETS_DIR,
+    FACE_CALM,
+    FACE_FILES,
+    FACE_HOT,
+    FACE_PAUSED,
+    FACE_PX,
+    FACE_RISING,
+    face_for,
+    face_png_path,
+    load_face_image,
+)
 from madlight.heat import HeatLevel, LANE_LABELS
 from madlight.ui import (
     CARD_EDGE,
     CENTER_HIT_PAD,
     DOT_PX,
-    FACE_CALM,
-    FACE_HOT,
-    FACE_PAUSED,
-    FACE_RISING,
     ICON_DIM,
     LANE_COUNT,
     MARK_ON_GRAY,
@@ -28,7 +43,6 @@ from madlight.ui import (
     center_mark_fill,
     center_ring,
     center_xy,
-    face_for,
     led_fill,
     meter_unit,
 )
@@ -73,6 +87,31 @@ def test_face_for_maps_listen_heat_and_pause() -> None:
     assert FACE_CALM != FACE_PAUSED
 
 
+def test_face_asset_pngs_exist_and_load() -> None:
+    notice = ASSETS_DIR.parent / "NOTICE"
+    text = notice.read_text(encoding="utf-8")
+    assert "Twemoji" in text
+    assert "CC-BY 4.0" in text
+    assert FACE_FILES == {
+        FACE_CALM: "calm.png",
+        FACE_RISING: "rising.png",
+        FACE_HOT: "hot.png",
+        FACE_PAUSED: "paused.png",
+    }
+    for glyph, name in FACE_FILES.items():
+        path = face_png_path(glyph)
+        assert path is not None and path.is_file(), name
+        assert path.name == name
+        img = load_face_image(glyph, FACE_PX)
+        assert img is not None
+        assert img.mode == "RGBA"
+        assert img.size == (FACE_PX, FACE_PX)
+        scaled = load_face_image(glyph, 24)
+        assert scaled is not None and scaled.size == (24, 24)
+    assert load_face_image("not-a-face") is None
+    assert face_png_path("not-a-face") is None
+
+
 def test_center_ink_and_ring() -> None:
     assert center_mark_fill(listening=False, idle=True) == MARK_ON_GRAY
     assert center_mark_fill(listening=True, idle=True) == MARK_ON_GRAY
@@ -108,7 +147,7 @@ def _click(win, x: int, y: int) -> None:
     win.root.update()
 
 
-@pytest.mark.skipif(not os.environ.get("DISPLAY"), reason="no display")
+@pytest.mark.skipif(not os.environ.get("DISPLAY") or not _HAS_TK, reason="no display/tk")
 def test_dot_window_paints_faces_and_center_toggles() -> None:
     from madlight.ui import DotWindow
 
@@ -120,7 +159,11 @@ def test_dot_window_paints_faces_and_center_toggles() -> None:
         win.root.update_idletasks()
         assert win._canvas.itemcget(win._led, "fill") == PALETTE["off"]
         assert win._canvas.itemcget(win._led_ring, "outline") == ICON_DIM
-        assert win._canvas.itemcget(win._face, "text") == FACE_CALM
+        assert win._canvas.type(win._face) == "image"
+        assert "center" in win._canvas.gettags(win._face)
+        assert win._face_glyph == FACE_CALM
+        assert win._face_photos[FACE_CALM] is not None
+        assert win._fallback_items == []
         assert win._canvas.itemcget(win._lane_fill[0], "state") == "hidden"
 
         win.set_state(
@@ -132,17 +175,17 @@ def test_dot_window_paints_faces_and_center_toggles() -> None:
         )
         win.root.update_idletasks()
         assert win._canvas.itemcget(win._led, "fill") == PALETTE[HeatLevel.HOT]
-        assert win._canvas.itemcget(win._face, "text") == FACE_HOT
+        assert win._face_glyph == FACE_HOT
 
         win.set_state(HeatLevel.RISING, True, idle=False, wave=[0.1] * 8)
         win.root.update_idletasks()
-        assert win._canvas.itemcget(win._face, "text") == FACE_RISING
+        assert win._face_glyph == FACE_RISING
 
         win.set_state(HeatLevel.HOT, False, idle=True, wave=[0.2] * 28, lanes=(0.1, 0.1, 0.1))
         win.root.update_idletasks()
         assert win._canvas.itemcget(win._led, "fill") == PALETTE["off"]
         assert win._canvas.itemcget(win._led_ring, "outline") == CARD_EDGE
-        assert win._canvas.itemcget(win._face, "text") == FACE_PAUSED
+        assert win._face_glyph == FACE_PAUSED
 
         assert win.hit_test(8, 8) == "tune"
         assert win.hit_test(46, 8) == "up"
@@ -166,13 +209,13 @@ def test_dot_window_paints_faces_and_center_toggles() -> None:
         win._last_toggle = -1.0
         _click(win, cx, cy)
         assert hits == ["toggle"]
-        assert win._canvas.itemcget(win._face, "text") == FACE_CALM  # press flipped pause→listen
+        assert win._face_glyph == FACE_CALM  # press flipped pause→listen
 
         hits.clear()
         win._last_toggle = -1.0
         _click(win, cx, cy)
         assert hits == ["toggle"]
-        assert win._canvas.itemcget(win._face, "text") == FACE_PAUSED
+        assert win._face_glyph == FACE_PAUSED
         assert win._canvas.itemcget(win._wave_items[0], "fill") == "#3F3F3F"
 
         # Hold/release must not toggle a second time (debounce + click latch).
@@ -214,7 +257,25 @@ def test_dot_window_paints_faces_and_center_toggles() -> None:
         win.destroy()
 
 
-@pytest.mark.skipif(not os.environ.get("DISPLAY"), reason="no display")
+@pytest.mark.skipif(not os.environ.get("DISPLAY") or not _HAS_TK, reason="no display/tk")
+def test_missing_face_png_falls_back_and_center_still_hits(monkeypatch: pytest.MonkeyPatch) -> None:
+    import madlight.ui as ui_mod
+
+    monkeypatch.setattr(ui_mod, "load_face_image", lambda *_a, **_k: None)
+    win = ui_mod.DotWindow(on_off=lambda: None, on_quit=lambda: None)
+    try:
+        win.set_state(HeatLevel.CALM, True, idle=True)
+        win.root.update_idletasks()
+        assert win._canvas.itemcget(win._face, "state") == "hidden"
+        assert win._fallback_items
+        assert all("center" in win._canvas.gettags(item) for item in win._fallback_items)
+        cx, cy = center_xy()
+        assert win.hit_test(cx, cy) == "center"
+    finally:
+        win.destroy()
+
+
+@pytest.mark.skipif(not os.environ.get("DISPLAY") or not _HAS_TK, reason="no display/tk")
 def test_band_meters_are_opt_in() -> None:
     from madlight.ui import DotWindow
 
