@@ -82,7 +82,9 @@ def test_face_for_maps_listen_heat_and_pause() -> None:
     assert face_for(listening=True, idle=False, level=HeatLevel.CALM) == FACE_CALM
     assert face_for(listening=True, idle=False, level=HeatLevel.RISING) == FACE_RISING
     assert face_for(listening=True, idle=False, level=HeatLevel.HOT) == FACE_HOT
-    assert FACE_RISING == "😐"
+    assert FACE_CALM == "😊"
+    assert FACE_RISING == "😬"
+    assert FACE_HOT == "😡"
     assert FACE_PAUSED == "🤐"
     assert FACE_CALM != FACE_PAUSED
 
@@ -157,12 +159,15 @@ def test_dot_window_paints_faces_and_center_toggles() -> None:
     try:
         win.set_state(HeatLevel.CALM, True, idle=True, wave=[0.001] * 8, lanes=(0.0, 0.0, 0.0))
         win.root.update_idletasks()
-        assert win._canvas.itemcget(win._led, "fill") == PALETTE["off"]
-        assert win._canvas.itemcget(win._led_ring, "outline") == ICON_DIM
+        assert win._canvas.type(win._led) == "image"
+        assert win._led_fill == PALETTE["off"]
+        assert win._led_ring_color == ICON_DIM
         assert win._canvas.type(win._face) == "image"
         assert "center" in win._canvas.gettags(win._face)
+        assert "center" in win._canvas.gettags(win._led)
         assert win._face_glyph == FACE_CALM
         assert win._face_photos[FACE_CALM] is not None
+        assert win._led_photos[(PALETTE["off"], ICON_DIM)] is not None
         assert win._fallback_items == []
         assert win._canvas.itemcget(win._lane_fill[0], "state") == "hidden"
 
@@ -174,17 +179,19 @@ def test_dot_window_paints_faces_and_center_toggles() -> None:
             lanes=(0.01, 0.04, 0.08),
         )
         win.root.update_idletasks()
-        assert win._canvas.itemcget(win._led, "fill") == PALETTE[HeatLevel.HOT]
+        assert win._led_fill == PALETTE[HeatLevel.HOT]
+        assert win._led_ring_color == PALETTE[HeatLevel.HOT]
         assert win._face_glyph == FACE_HOT
 
         win.set_state(HeatLevel.RISING, True, idle=False, wave=[0.1] * 8)
         win.root.update_idletasks()
         assert win._face_glyph == FACE_RISING
+        assert win._led_fill == PALETTE[HeatLevel.RISING]
 
         win.set_state(HeatLevel.HOT, False, idle=True, wave=[0.2] * 28, lanes=(0.1, 0.1, 0.1))
         win.root.update_idletasks()
-        assert win._canvas.itemcget(win._led, "fill") == PALETTE["off"]
-        assert win._canvas.itemcget(win._led_ring, "outline") == CARD_EDGE
+        assert win._led_fill == PALETTE["off"]
+        assert win._led_ring_color == CARD_EDGE
         assert win._face_glyph == FACE_PAUSED
 
         assert win.hit_test(8, 8) == "tune"

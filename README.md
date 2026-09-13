@@ -31,10 +31,10 @@ These are the north-star uses. They are why the light exists. **v0 still only sh
 
 | Face + circle | Meaning (energy only) |
 | --- | --- |
-| **🙂 green** | listening, calm — steady low-but-present energy |
-| **😐 amber** | listening, rising — mid energy, or energy climbing |
-| **😠 red** | listening, hot — high RMS |
-| **🙂 dark grey** | listening, near-silence (armed — still capturing) |
+| **😊 green** | listening, calm — steady low-but-present energy |
+| **😬 amber** | listening, rising — mid energy, or energy climbing |
+| **😡 red** | listening, hot — high RMS |
+| **😊 dark grey** | listening, near-silence (armed — still capturing) |
 | **🤐 dark grey** | paused — not listening, capture off |
 
 The overlay is a **compact floating card** (Voice Access–style chrome, not a dashboard): **Tune + / −** (this heat feels right / wrong), drag handle, close, a **center face** (click = pause ↔ listen), gear / help, and **one waveform** under the circle. There are **no** fixed “3 voice” lines on the default card. The tray icon mirrors the circle color. **Pause** is a click on the center face (Space is an optional shortcut; also Escape / tray). Pause **stops capture immediately** (same kill switch as `--text` `off` / `pause`). Drag the handle or card to move; close quits.
@@ -173,8 +173,8 @@ madlight --demo --text
 
 # 3. Synthetic GUI (no meeting):
 madlight --demo --no-tray
-# floating card: grey + 🙂 when silent (still listening); grey + 🤐 when paused;
-# green/amber/red + 🙂/😐/😠 when energy;
+# floating card: grey + 😊 when silent (still listening); grey + 🤐 when paused;
+# green/amber/red + 😊/😬/😡 when energy;
 # one waveform under the face (no 3-band “voices” unless you enable them in Tuning)
 # click the center face to pause / resume; Tune +/− rates the heat; × closes
 
@@ -209,7 +209,7 @@ Defaults target **2–5 person video calls** on a hot loopback / loud meeting ma
 - climb must hold `rise_dwell_seconds = 1.2` before calm→rising; density already integrates over the 2 s window
 - meters: one waveform bar every 6 blocks (~300 ms); incoming RMS uses EMA 0.12; optional band meters use EMA 0.08 (slower than the previous stride-3 / 0.16 defaults)
 
-`--text` prints `rms`, `slope`, and dBFS so you can nudge `--rising-rms` / `--hot-rms` / `--rising-slope`. Or use **Tune + / −** and gear **Tuning** (sensitivity) on the card. Quiet Linux headphone mixes may need **lower** flags; a still-hotter Windows loopback may need **higher** ones. Idle listening vs paused are the same grey, different faces (🙂 armed vs 🤐 muted).
+`--text` prints `rms`, `slope`, and dBFS so you can nudge `--rising-rms` / `--hot-rms` / `--rising-slope`. Or use **Tune + / −** and gear **Tuning** (sensitivity) on the card. Quiet Linux headphone mixes may need **lower** flags; a still-hotter Windows loopback may need **higher** ones. Idle listening vs paused are the same grey, different faces (😊 armed vs 🤐 muted).
 
 ## Windows
 
@@ -225,7 +225,7 @@ Loopback gain is often much hotter than a Linux headphone sink (meeting mix near
 madlight --backend soundcard --rising-rms 0.10 --rising-slope 0.16 --hot-rms 0.26 --text
 ```
 
-If the LED never leaves green on a quiet headset mix, lower `--rising-rms` / `--hot-rms` instead — or open **Tuning** and pick **Higher** sensitivity. Use `--demo` first if you want to see grey (silence / pause), heat colors, **crisp color faces**, and the energy strip without a meeting. The center uses bundled Twemoji PNGs (not Segoe/Noto emoji fonts) so Windows shows the same color faces as Linux. Tray may be missing on some desktops; click the face (or Space) still pauses.
+If the LED never leaves green on a quiet headset mix, lower `--rising-rms` / `--hot-rms` instead — or open **Tuning** and pick **Higher** sensitivity. Use `--demo` first if you want to see grey (silence / pause), heat colors, **crisp color faces**, and the energy strip without a meeting. The heat disc (and gear / help) is a 4× Pillow ellipse composited with those Twemoji PNGs — not a Tk `create_oval` — so the ring stays smooth on Windows. The center uses bundled Twemoji PNGs (not Segoe/Noto emoji fonts) so Windows shows the same color faces as Linux. Tray may be missing on some desktops; click the face (or Space) still pauses.
 
 ## PyInstaller (optional)
 
