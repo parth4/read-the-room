@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "madlite"
+version = "0.1.0"
+description = "Mad Lite — local-only Meeting Atmosphere Dial"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Mad Lite" }]
+keywords = ["meeting", "audio", "pipewire", "pulseaudio", "tray"]
+classifiers = [
+    "Environment :: X11 Applications",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
+]
+dependencies = [
+    "numpy>=1.26",
+    "pillow>=10.0",
+    "pystray>=0.19",
+    "soundcard>=0.4.3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+madlite = "madlite.app:main"
+
+[project.urls]
+Homepage = "https://github.com/parth4/mad-lite"
+
+[tool.hatch.build.targets.wheel]
+packages = ["madlite"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
