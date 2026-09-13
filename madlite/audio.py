@@ -306,10 +306,10 @@ def _demo_amplitude(t: float) -> float:
     """~10s loop: quiet → climb → hot → fade. Peak amplitude of a sine."""
     cycle = 10.0
     x = t % cycle
-    if x < 3.0:
+    if x < 2.0:
         return 0.006
-    if x < 5.0:
-        return 0.006 + (x - 3.0) / 2.0 * 0.10
+    if x < 5.5:
+        return 0.006 + (x - 2.0) / 3.5 * 0.10
     if x < 8.0:
         return 0.22
     return 0.22 * max(0.0, 1.0 - (x - 8.0) / 2.0)

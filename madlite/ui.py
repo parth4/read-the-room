@@ -17,6 +17,13 @@ PALETTE = {
     "off": "#6B6B6B",
 }
 
+INK = {
+    HeatLevel.CALM: "#102018",
+    HeatLevel.RISING: "#2A1C00",
+    HeatLevel.HOT: "#2A0A08",
+    "off": "#F2F2F2",
+}
+
 LABEL = {
     HeatLevel.CALM: "CALM",
     HeatLevel.RISING: "RISING",
@@ -49,7 +56,7 @@ class PillWindow:
         self._on_quit = on_quit
         self.root = tk.Tk()
         self.root.title("Mad Lite")
-        self.root.configure(bg="#1B1B1B")
+        self.root.configure(bg=PALETTE[HeatLevel.CALM])
         try:
             self.root.attributes("-topmost", True)
         except tk.TclError:
@@ -59,46 +66,43 @@ class PillWindow:
         except tk.TclError:
             pass
         self.root.resizable(False, False)
-        self.root.geometry("196x44+24+24")
+        self.root.geometry("220x48+24+24")
 
         self._drag_x = 0
         self._drag_y = 0
-        self._frame = tk.Frame(self.root, bg="#1B1B1B", padx=8, pady=6)
+        self._frame = tk.Frame(self.root, bg=PALETTE[HeatLevel.CALM], padx=10, pady=8)
         self._frame.pack(fill="both", expand=True)
-
-        self._dot = tk.Canvas(
-            self._frame, width=16, height=16, bg="#1B1B1B", highlightthickness=0
-        )
-        self._dot.pack(side="left")
-        self._swatch = self._dot.create_oval(1, 1, 15, 15, fill=PALETTE[HeatLevel.CALM], outline="")
 
         self._label = tk.Label(
             self._frame,
             text="CALM",
-            fg="#F2F2F2",
-            bg="#1B1B1B",
-            font=("sans-serif", 10, "bold"),
+            fg=INK[HeatLevel.CALM],
+            bg=PALETTE[HeatLevel.CALM],
+            font=("sans-serif", 12, "bold"),
             width=8,
             anchor="w",
         )
-        self._label.pack(side="left", padx=(8, 4))
+        self._label.pack(side="left")
 
         self._off = tk.Button(
             self._frame,
-            text="Off",
+            text="OFF",
             command=self._on_off,
-            bg="#3A3A3A",
+            bg="#1B1B1B",
             fg="#F2F2F2",
-            activebackground="#555555",
+            activebackground="#111111",
             activeforeground="#FFFFFF",
             relief="flat",
-            padx=8,
-            font=("sans-serif", 9, "bold"),
+            padx=10,
+            pady=2,
+            font=("sans-serif", 10, "bold"),
             cursor="hand2",
+            highlightthickness=0,
+            bd=0,
         )
         self._off.pack(side="right")
 
-        for widget in (self.root, self._frame, self._dot, self._label):
+        for widget in (self.root, self._frame, self._label):
             widget.bind("<ButtonPress-1>", self._start_drag)
             widget.bind("<B1-Motion>", self._drag)
             widget.bind("<Button-3>", self._menu)
@@ -125,14 +129,17 @@ class PillWindow:
     def set_state(self, level: HeatLevel, listening: bool) -> None:
         if not listening:
             color = PALETTE["off"]
+            ink = INK["off"]
             text = "OFF"
-            btn = "On"
+            btn = "ON"
         else:
             color = PALETTE[level]
+            ink = INK[level]
             text = LABEL[level]
-            btn = "Off"
-        self._dot.itemconfig(self._swatch, fill=color)
-        self._label.configure(text=text)
+            btn = "OFF"
+        self.root.configure(bg=color)
+        self._frame.configure(bg=color)
+        self._label.configure(text=text, bg=color, fg=ink)
         self._off.configure(text=btn, command=self._on_off)
 
     def after(self, ms: int, fn: Callable[[], None]) -> None:
