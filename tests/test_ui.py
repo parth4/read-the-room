@@ -13,7 +13,7 @@ from madlight.ui import DOT_PX, LANE_COUNT, PALETTE, WIN_H, WIN_W, led_fill, met
 def test_dot_stays_pip_sized_inside_a_compact_strip() -> None:
     assert DOT_PX <= 20
     assert WIN_W <= 100
-    assert WIN_H <= 52
+    assert WIN_H <= 56
     assert WIN_W > DOT_PX
     assert WIN_H >= DOT_PX
     assert LANE_COUNT == 3
@@ -52,7 +52,8 @@ def test_meter_unit_clips() -> None:
 def test_dot_window_paints_idle_hot_and_paused() -> None:
     from madlight.ui import DotWindow
 
-    win = DotWindow(on_off=lambda: None, on_quit=lambda: None)
+    hits: list[str] = []
+    win = DotWindow(on_off=lambda: hits.append("toggle"), on_quit=lambda: None)
     try:
         win.set_state(HeatLevel.CALM, True, idle=True, wave=[0.001] * 8, lanes=(0.0, 0.0, 0.0))
         win.root.update_idletasks()
@@ -70,5 +71,12 @@ def test_dot_window_paints_idle_hot_and_paused() -> None:
         win.root.update_idletasks()
         assert win._canvas.itemcget(win._led, "fill") == PALETTE["off"]
         assert win._canvas.itemcget(win._pause_a, "state") == "normal"
+        win.root.update()
+        rx = win.root.winfo_rootx() + 8
+        ry = win.root.winfo_rooty() + 8
+        win.root.event_generate("<ButtonPress-1>", x=8, y=8, rootx=rx, rooty=ry)
+        win.root.event_generate("<ButtonRelease-1>", x=8, y=8, rootx=rx, rooty=ry)
+        win.root.update()
+        assert hits == ["toggle"]
     finally:
         win.destroy()

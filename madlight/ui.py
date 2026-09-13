@@ -33,13 +33,13 @@ WAVE_BARS = 28
 WAVE_BAR_W = 2
 WAVE_W = WAVE_BARS * WAVE_BAR_W
 WAVE_H = DOT_PX
-LANE_H = 3
-LANE_GAP = 2
+LANE_H = 4
+LANE_GAP = 3
 LANE_COUNT = 3
 # Display scale: typical speech fills the meter; hot still clips at 1.
 WAVE_FULL_RMS = 0.14
-LANE_FULL_RMS = 0.055
-CLICK_PX = 4
+LANE_FULL_RMS = 0.04
+CLICK_PX = 8
 
 WIN_W = PAD_PX + DOT_PX + PAD_PX + WAVE_W + PAD_PX
 WIN_H = PAD_PX + DOT_PX + PAD_PX + LANE_COUNT * LANE_H + (LANE_COUNT - 1) * LANE_GAP + PAD_PX
@@ -105,6 +105,7 @@ class DotWindow:
 
         self._drag_x = 0
         self._drag_y = 0
+        self._press_xy = (0, 0)
         self._moved = False
         self._canvas = tk.Canvas(
             self.root,
@@ -125,10 +126,10 @@ class DotWindow:
         mid_x = PAD_PX + DOT_PX / 2
         mid_y = PAD_PX + DOT_PX / 2
         self._pause_a = self._canvas.create_rectangle(
-            mid_x - 3.5, mid_y - 3.5, mid_x - 1.5, mid_y + 3.5, fill=PAUSE_MARK, outline=""
+            mid_x - 4, mid_y - 4, mid_x - 1.5, mid_y + 4, fill=PAUSE_MARK, outline=""
         )
         self._pause_b = self._canvas.create_rectangle(
-            mid_x + 1.5, mid_y - 3.5, mid_x + 3.5, mid_y + 3.5, fill=PAUSE_MARK, outline=""
+            mid_x + 1.5, mid_y - 4, mid_x + 4, mid_y + 4, fill=PAUSE_MARK, outline=""
         )
         self._canvas.itemconfig(self._pause_a, state="hidden")
         self._canvas.itemconfig(self._pause_b, state="hidden")
@@ -155,7 +156,7 @@ class DotWindow:
             y = lane_y0 + i * (LANE_H + LANE_GAP)
             self._lane_track.append(
                 self._canvas.create_rectangle(
-                    lane_x0, y, lane_x1, y + LANE_H, fill="#222222", outline=""
+                    lane_x0, y, lane_x1, y + LANE_H, fill="#2C2C2C", outline=""
                 )
             )
             self._lane_fill.append(
@@ -179,6 +180,7 @@ class DotWindow:
     def _start_drag(self, event: Any) -> None:
         self._drag_x = event.x_root - self.root.winfo_x()
         self._drag_y = event.y_root - self.root.winfo_y()
+        self._press_xy = (self.root.winfo_x(), self.root.winfo_y())
         self._moved = False
         try:
             self.root.focus_set()
@@ -194,7 +196,8 @@ class DotWindow:
             self.root.geometry(f"+{event.x_root - self._drag_x}+{event.y_root - self._drag_y}")
 
     def _click_or_end_drag(self, _event: Any) -> None:
-        if not self._moved:
+        # Toggle pause only if the window did not move (click, not drag).
+        if (self.root.winfo_x(), self.root.winfo_y()) == self._press_xy:
             self._on_off()
 
     def _menu(self, event: Any) -> None:
