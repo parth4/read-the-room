@@ -19,7 +19,9 @@ from madlight.synth import SYNTH_KINDS, write_kind
 
 LEVELS = (HeatLevel.CALM, HeatLevel.RISING, HeatLevel.HOT)
 # Offline files only. Typical headphone playback is not 0 dBFS YouTube LUFS.
-DEFAULT_FILE_PEAK = 0.15
+# Headphone-like file domain, paired with live rising_rms=0.08 / hot_rms=0.22.
+# 0.15 peak cannot reach hot_rms (max RMS ≤ peak).
+DEFAULT_FILE_PEAK = 0.30
 
 
 @dataclass(frozen=True)
@@ -298,9 +300,9 @@ def format_report(
 
 def _grid() -> list[HeatConfig]:
     base = HeatConfig()
-    rising_rms = (0.030, 0.045, 0.060, 0.080)
-    hot_rms = (0.090, 0.110, 0.140, 0.180)
-    slopes = (0.020, 0.035, 0.050)
+    rising_rms = (0.045, 0.060, 0.080, 0.100)
+    hot_rms = (0.110, 0.160, 0.180, 0.220)
+    slopes = (0.070, 0.100, 0.140)
     out: list[HeatConfig] = []
     for rr in rising_rms:
         for hr in hot_rms:

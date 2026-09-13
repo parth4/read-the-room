@@ -35,9 +35,11 @@ class HeatConfig:
     block_ms: int = 50
     window_seconds: float = 2.0
     slope_seconds: float = 0.6
-    rising_rms: float = 0.045
-    hot_rms: float = 0.11
-    rising_slope: float = 0.07
+    # Defaults sized for hot loopback / loud meeting masters (see README).
+    # Linux-quiet headphone mixes can lower these via --rising-rms / --hot-rms.
+    rising_rms: float = 0.08
+    hot_rms: float = 0.22
+    rising_slope: float = 0.14
     drop_margin: float = 0.015
     silence_rms: float = 0.008
     # Density path (talk-over / heated room vs peaky monologue).
@@ -154,12 +156,15 @@ def classify_heat(
     slope_cut = slope_hold if current is HeatLevel.RISING else slope_enter
     climbing = slope >= slope_cut and rms >= cfg.silence_rms
     # Density: continuous/modulated energy (crosstalk), not peaky monologue,
-    # not flat music (cv ~ 0).
+    # not flat music (cv ~ 0). Gate on rising_rms — silence_rms is far too
+    # low on hot masters / WASAPI loopback (compressed speech sits above
+    # 0.008 for the whole 2 s window, so fill≈1 and the LED went yellow
+    # in ~2–3 s of normal VC talk).
     dense = (
         fill >= cfg.density_fill
         and 0.0 < crest <= cfg.density_crest_max
         and cv >= cfg.density_cv_min
-        and rms >= cfg.silence_rms
+        and rms >= cfg.rising_rms
     )
     # Absolute loud alone is NOT rising (that false-fired calm TED).
     # Climb or dense talk-over is.

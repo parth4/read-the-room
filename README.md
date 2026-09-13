@@ -185,14 +185,15 @@ Files default to **peak-normalize** (YouTube LUFS ≠ live volume). `--no-normal
 
 ## Tuning
 
-Defaults are conservative for speech-ish meeting playback:
+Defaults target **2–5 person video calls** on a hot loopback / loud meeting master (normal talk stays green; amber/red for a real climb or talk-over):
 
-- `rising_rms = 0.045`, `hot_rms = 0.11` (linear amplitude, 0..1)
-- `rising_slope = 0.07` (RMS per second)
+- `rising_rms = 0.08`, `hot_rms = 0.22` (linear amplitude, 0..1)
+- `rising_slope = 0.14` (RMS per second)
+- density (talk-over) enters only when `rms >= rising_rms` — not the `silence_rms` floor
 - 50 ms blocks, 2 s RMS window, 0.6 s slope window, hysteresis via `drop_margin`
 - idle grey uses the same `silence_rms = 0.008` floor as the classifier (smoothed RMS)
 
-`--text` prints `rms`, `slope`, and dBFS so you can nudge `--hot-rms` / `--rising-rms` if your headset mix is very quiet or very hot. The LED stays three heat colors plus dark grey (paused / idle).
+`--text` prints `rms`, `slope`, and dBFS so you can nudge `--rising-rms` / `--hot-rms` / `--rising-slope`. Quiet Linux headphone mixes may need **lower** flags; a still-hotter Windows loopback may need **higher** ones. The LED stays three heat colors plus dark grey (paused / idle).
 
 ## Windows
 
@@ -202,7 +203,13 @@ WASAPI loopback via `soundcard` (same `--backend` as Linux):
 madlight --backend soundcard
 ```
 
-Use `--demo` first if you want to see grey (silence / pause), heat colors, the scrolling level, and the three activity lanes without a meeting. Tray may be missing on some desktops; click or Space still pauses.
+Loopback gain is often much hotter than a Linux headphone sink (meeting mix near full scale). Defaults above are sized for that. If normal 2–5 person talk still goes amber in the first seconds, raise the flags and watch `--text`:
+
+```bash
+madlight --backend soundcard --rising-rms 0.10 --rising-slope 0.16 --hot-rms 0.26 --text
+```
+
+If the LED never leaves green on a quiet headset mix, lower `--rising-rms` / `--hot-rms` instead. Use `--demo` first if you want to see grey (silence / pause), heat colors, the scrolling level, and the three activity lanes without a meeting. Tray may be missing on some desktops; click or Space still pauses.
 
 ## PyInstaller (optional)
 
