@@ -1,4 +1,4 @@
-"""Always-on-top recording-pip LED, compact meter, and tray kill switch."""
+"""Always-on-top floating card: chrome + heat circle + meter + tray."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw
 
 from madlight.heat import HeatLevel
 
-# Hardware-LED / Zoom-rec pip colors (tunable via these constants).
+# Heat / idle fills. Card chrome is a separate dark-gray panel.
 PALETTE = {
     HeatLevel.CALM: "#3DDC97",
     HeatLevel.RISING: "#F4C15D",
@@ -18,7 +18,13 @@ PALETTE = {
     "off": "#3A3A3A",
 }
 
-RING = "#141414"
+CARD = "#2C2C2C"
+CARD_EDGE = "#3A3A3A"
+RING = CARD
+ICON = "#C8C8C8"
+ICON_DIM = "#8A8A8A"
+HANDLE = "#9A9A9A"
+PAUSE_MARK = "#D0D0D0"
 
 LABEL = {
     HeatLevel.CALM: "calm",
@@ -26,29 +32,39 @@ LABEL = {
     HeatLevel.HOT: "hot",
 }
 
-# Visible LED diameter stays pip-sized; the window is a thin strip around it.
-DOT_PX = 16
-PAD_PX = 4
+# Compact Voice Access–style card. Center circle is the listening/heat control.
+DOT_PX = 44
+CHROME_H = 20
+PAD_X = 16
+WIN_W = 232
 WAVE_BARS = 28
-WAVE_BAR_W = 2
-WAVE_W = WAVE_BARS * WAVE_BAR_W
-WAVE_H = DOT_PX
-LANE_H = 4
+WAVE_H = 12
+LANE_H = 3
 LANE_GAP = 3
 LANE_COUNT = 3
-# Display scale: typical speech fills the meter; hot still clips at 1.
 WAVE_FULL_RMS = 0.14
 LANE_FULL_RMS = 0.04
 CLICK_PX = 8
 
-WIN_W = PAD_PX + DOT_PX + PAD_PX + WAVE_W + PAD_PX
-WIN_H = PAD_PX + DOT_PX + PAD_PX + LANE_COUNT * LANE_H + (LANE_COUNT - 1) * LANE_GAP + PAD_PX
+CIRCLE_X = (WIN_W - DOT_PX) // 2
+CIRCLE_Y = CHROME_H + 6
+ROW_CY = CIRCLE_Y + DOT_PX // 2
+WAVE_Y = CIRCLE_Y + DOT_PX + 8
+LANE_Y0 = WAVE_Y + WAVE_H + 6
+WIN_H = LANE_Y0 + LANE_COUNT * LANE_H + (LANE_COUNT - 1) * LANE_GAP + 10
 
-# Activity lanes: low / mid / high bands — not speaker colors.
 LANE_COLORS = ("#5E9A8A", "#6B8CAE", "#8A7AA8")
-WAVE_LIVE = "#9A9A9A"
+WAVE_LIVE = "#B0B0B0"
 WAVE_DIM = "#3F3F3F"
-PAUSE_MARK = "#C8C8C8"
+
+HELP_TEXT = (
+    "Mad Light — meeting heat from the local loopback mix.\n\n"
+    "Center: click to pause / resume listening.\n"
+    "Green calm · amber rising · red hot.\n"
+    "Dark gray = paused or idle (not live).\n\n"
+    "Activity lanes are low / mid / high frequency bands "
+    "of the same mix — not speaker names, not diarization."
+)
 
 
 def led_fill(*, listening: bool, idle: bool, level: HeatLevel) -> str:
@@ -64,17 +80,30 @@ def meter_unit(value: float, full: float) -> float:
     return max(0.0, min(1.0, float(value) / full))
 
 
+def center_xy() -> tuple[int, int]:
+    return WIN_W // 2, ROW_CY
+
+
 def make_icon(level: HeatLevel | None, size: int = 64) -> Image.Image:
     color = PALETTE["off"] if level is None else PALETTE[level]
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     inset = 6
-    draw.ellipse((inset, inset, size - inset - 1, size - inset - 1), fill=color, outline=RING)
+    draw.ellipse((inset, inset, size - inset - 1, size - inset - 1), fill=color, outline=CARD)
     return img
 
 
+def _in_rect(x: float, y: float, box: tuple[int, int, int, int]) -> bool:
+    x0, y0, x1, y1 = box
+    return x0 <= x <= x1 and y0 <= y <= y1
+
+
+def _in_circle(x: float, y: float, cx: int, cy: int, r: int) -> bool:
+    return (x - cx) ** 2 + (y - cy) ** 2 <= r * r
+
+
 class DotWindow:
-    """Compact always-on-top strip: LED + scrolling level + 3 activity lanes."""
+    """Compact always-on-top card: chrome, heat circle, level, activity lanes."""
 
     def __init__(
         self,
@@ -88,10 +117,10 @@ class DotWindow:
         self._on_off = on_off
         self._on_quit = on_quit
         self._paused = False
+        self._help_win: Any = None
         self.root = tk.Tk()
         self.root.title("Mad Light")
-        # Tiny dark bezel. No chroma-key: failed transparency must not become a pink square.
-        self.root.configure(bg=RING)
+        self.root.configure(bg=CARD)
         try:
             self.root.attributes("-topmost", True)
         except tk.TclError:
@@ -107,56 +136,87 @@ class DotWindow:
         self._drag_y = 0
         self._press_xy = (0, 0)
         self._moved = False
+        self._can_drag = False
+        self._hit = "card"
         self._canvas = tk.Canvas(
             self.root,
             width=WIN_W,
             height=WIN_H,
-            bg=RING,
+            bg=CARD,
             highlightthickness=0,
             bd=0,
         )
         self._canvas.pack(fill="both", expand=True)
-        x0, y0 = PAD_PX, PAD_PX
-        x1, y1 = PAD_PX + DOT_PX, PAD_PX + DOT_PX
-        self._ring = self._canvas.create_oval(
-            x0 - 1, y0 - 1, x1 + 1, y1 + 1, fill=RING, outline=""
+        self._canvas.create_rectangle(0, 0, WIN_W - 1, WIN_H - 1, outline=CARD_EDGE, fill=CARD)
+
+        hx0, hy0 = WIN_W // 2 - 14, 8
+        self._handle = self._canvas.create_rectangle(
+            hx0, hy0, hx0 + 28, hy0 + 3, fill=HANDLE, outline="", tags=("handle",)
         )
-        self._led = self._canvas.create_oval(x0, y0, x1, y1, fill=PALETTE["off"], outline="")
-        # Pause affordance: two marks on the LED (hidden while listening).
-        mid_x = PAD_PX + DOT_PX / 2
-        mid_y = PAD_PX + DOT_PX / 2
+        self._close_x = WIN_W - 16
+        self._close_y = 10
+        self._close_a = self._canvas.create_line(
+            self._close_x - 4, self._close_y - 4, self._close_x + 4, self._close_y + 4,
+            fill=ICON, width=2, tags=("close",),
+        )
+        self._close_b = self._canvas.create_line(
+            self._close_x - 4, self._close_y + 4, self._close_x + 4, self._close_y - 4,
+            fill=ICON, width=2, tags=("close",),
+        )
+
+        cx, cy = center_xy()
+        self._side_gear = 28
+        self._side_help = WIN_W - 28
+        self._draw_gear(self._side_gear, cy)
+        self._help_ring = self._canvas.create_oval(
+            self._side_help - 8, cy - 8, self._side_help + 8, cy + 8,
+            outline=ICON, width=1, tags=("help",),
+        )
+        self._help_mark = self._canvas.create_text(
+            self._side_help, cy, text="?", fill=ICON, font=("Sans", 10, "bold"), tags=("help",)
+        )
+
+        r = DOT_PX / 2
+        self._led_ring = self._canvas.create_oval(
+            cx - r - 2, cy - r - 2, cx + r + 2, cy + r + 2, outline=CARD_EDGE, width=2
+        )
+        self._led = self._canvas.create_oval(
+            cx - r, cy - r, cx + r, cy + r, fill=PALETTE["off"], outline=""
+        )
         self._pause_a = self._canvas.create_rectangle(
-            mid_x - 4, mid_y - 4, mid_x - 1.5, mid_y + 4, fill=PAUSE_MARK, outline=""
+            cx - 5, cy - 7, cx - 2, cy + 7, fill=PAUSE_MARK, outline=""
         )
         self._pause_b = self._canvas.create_rectangle(
-            mid_x + 1.5, mid_y - 4, mid_x + 4, mid_y + 4, fill=PAUSE_MARK, outline=""
+            cx + 2, cy - 7, cx + 5, cy + 7, fill=PAUSE_MARK, outline=""
         )
         self._canvas.itemconfig(self._pause_a, state="hidden")
         self._canvas.itemconfig(self._pause_b, state="hidden")
 
-        wave_x = PAD_PX + DOT_PX + PAD_PX
+        wave_x = PAD_X
+        wave_span = WIN_W - PAD_X * 2
+        self._wave_bar_w = max(2, wave_span // WAVE_BARS)
+        self._wave_x0 = wave_x + (wave_span - self._wave_bar_w * WAVE_BARS) // 2
+        mid = WAVE_Y + WAVE_H / 2
         self._wave_items = [
             self._canvas.create_rectangle(
-                wave_x + i * WAVE_BAR_W,
-                PAD_PX + WAVE_H,
-                wave_x + i * WAVE_BAR_W + WAVE_BAR_W - 1,
-                PAD_PX + WAVE_H,
+                self._wave_x0 + i * self._wave_bar_w,
+                mid,
+                self._wave_x0 + i * self._wave_bar_w + self._wave_bar_w - 1,
+                mid,
                 fill=WAVE_LIVE,
                 outline="",
             )
             for i in range(WAVE_BARS)
         ]
 
-        lane_y0 = PAD_PX + DOT_PX + PAD_PX
-        lane_x0 = PAD_PX
-        lane_x1 = WIN_W - PAD_PX
+        lane_x0, lane_x1 = PAD_X, WIN_W - PAD_X
         self._lane_track: list[int] = []
         self._lane_fill: list[int] = []
         for i in range(LANE_COUNT):
-            y = lane_y0 + i * (LANE_H + LANE_GAP)
+            y = LANE_Y0 + i * (LANE_H + LANE_GAP)
             self._lane_track.append(
                 self._canvas.create_rectangle(
-                    lane_x0, y, lane_x1, y + LANE_H, fill="#2C2C2C", outline=""
+                    lane_x0, y, lane_x1, y + LANE_H, fill="#3A3A3A", outline=""
                 )
             )
             self._lane_fill.append(
@@ -170,6 +230,7 @@ class DotWindow:
             widget.bind("<B1-Motion>", self._drag)
             widget.bind("<ButtonRelease-1>", self._click_or_end_drag)
             widget.bind("<Button-3>", self._menu)
+            widget.bind("<Motion>", self._hover)
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_quit)
         self.root.bind("<Escape>", lambda _e: self._on_off())
@@ -177,11 +238,52 @@ class DotWindow:
         self._canvas.bind("<Escape>", lambda _e: self._on_off())
         self._canvas.bind("<space>", lambda _e: self._on_off())
 
+    def _draw_gear(self, cx: int, cy: int) -> None:
+        self._canvas.create_oval(
+            cx - 6, cy - 6, cx + 6, cy + 6, outline=ICON, width=1, tags=("gear",)
+        )
+        self._canvas.create_oval(
+            cx - 2, cy - 2, cx + 2, cy + 2, outline=ICON, width=1, tags=("gear",)
+        )
+        for dx, dy in ((0, -8), (0, 8), (-8, 0), (8, 0)):
+            self._canvas.create_line(
+                cx + dx * 0.45, cy + dy * 0.45, cx + dx * 0.85, cy + dy * 0.85,
+                fill=ICON, width=2, tags=("gear",),
+            )
+
+    def _hit_boxes(self) -> dict[str, tuple[int, int, int, int]]:
+        return {
+            "close": (WIN_W - 28, 0, WIN_W, CHROME_H + 2),
+            "handle": (WIN_W // 2 - 24, 0, WIN_W // 2 + 24, CHROME_H),
+            "gear": (self._side_gear - 12, ROW_CY - 12, self._side_gear + 12, ROW_CY + 12),
+            "help": (self._side_help - 12, ROW_CY - 12, self._side_help + 12, ROW_CY + 12),
+        }
+
+    def hit_test(self, x: float, y: float) -> str:
+        boxes = self._hit_boxes()
+        for name in ("close", "gear", "help", "handle"):
+            if _in_rect(x, y, boxes[name]):
+                return name
+        cx, cy = center_xy()
+        if _in_circle(x, y, cx, cy, DOT_PX // 2 + 2):
+            return "center"
+        return "card"
+
+    def _hover(self, event: Any) -> None:
+        hit = self.hit_test(event.x, event.y)
+        cursor = "hand2" if hit in {"center", "close", "gear", "help"} else "fleur" if hit in {"handle", "card"} else "arrow"
+        try:
+            self._canvas.configure(cursor=cursor)
+        except Exception:
+            pass
+
     def _start_drag(self, event: Any) -> None:
         self._drag_x = event.x_root - self.root.winfo_x()
         self._drag_y = event.y_root - self.root.winfo_y()
         self._press_xy = (self.root.winfo_x(), self.root.winfo_y())
         self._moved = False
+        self._hit = self.hit_test(event.x, event.y)
+        self._can_drag = self._hit in {"handle", "card"}
         try:
             self.root.focus_set()
         except Exception:
@@ -192,23 +294,72 @@ class DotWindow:
         dy = event.y_root - self.root.winfo_y() - self._drag_y
         if abs(dx) > CLICK_PX or abs(dy) > CLICK_PX:
             self._moved = True
-        if self._moved:
+        if self._can_drag and self._moved:
             self.root.geometry(f"+{event.x_root - self._drag_x}+{event.y_root - self._drag_y}")
 
-    def _click_or_end_drag(self, _event: Any) -> None:
-        # Toggle pause only if the window did not move (click, not drag).
-        if (self.root.winfo_x(), self.root.winfo_y()) == self._press_xy:
+    def _click_or_end_drag(self, event: Any) -> None:
+        if self._moved:
+            return
+        if (self.root.winfo_x(), self.root.winfo_y()) != self._press_xy and self._can_drag:
+            return
+        hit = self._hit
+        if hit == "center":
             self._on_off()
+        elif hit == "close":
+            self._on_quit()
+        elif hit == "gear":
+            self._menu(event)
+        elif hit == "help":
+            self._show_help()
 
     def _menu(self, event: Any) -> None:
-        menu = self._tk.Menu(self.root, tearoff=0)
+        menu = self._tk.Menu(self.root, tearoff=0, bg=CARD, fg=ICON, activebackground="#3A3A3A")
         pause_label = "Resume listening" if self._paused else "Pause listening"
         menu.add_command(label=pause_label, command=self._on_off)
+        menu.add_separator()
+        menu.add_command(label="Activity lanes: low / mid / high (not speakers)", command=self._show_help)
+        menu.add_separator()
         menu.add_command(label="Quit", command=self._on_quit)
         try:
             menu.tk_popup(event.x_root, event.y_root)
         finally:
             menu.grab_release()
+
+    def _show_help(self) -> None:
+        if self._help_win is not None:
+            try:
+                self._help_win.lift()
+                return
+            except Exception:
+                self._help_win = None
+        win = self._tk.Toplevel(self.root)
+        win.title("Mad Light")
+        win.configure(bg=CARD)
+        try:
+            win.attributes("-topmost", True)
+        except self._tk.TclError:
+            pass
+        msg = self._tk.Label(
+            win,
+            text=HELP_TEXT,
+            justify="left",
+            bg=CARD,
+            fg=ICON,
+            font=("Sans", 10),
+            padx=16,
+            pady=14,
+        )
+        msg.pack()
+        win.resizable(False, False)
+        self._help_win = win
+        win.protocol("WM_DELETE_WINDOW", lambda: self._close_help(win))
+
+    def _close_help(self, win: Any) -> None:
+        self._help_win = None
+        try:
+            win.destroy()
+        except Exception:
+            pass
 
     def set_state(
         self,
@@ -220,7 +371,10 @@ class DotWindow:
     ) -> None:
         self._paused = not listening
         color = led_fill(listening=listening, idle=idle, level=level)
+        live = listening and not idle
         self._canvas.itemconfig(self._led, fill=color)
+        ring = color if live else CARD_EDGE
+        self._canvas.itemconfig(self._led_ring, outline=ring)
         pause_state = "normal" if not listening else "hidden"
         self._canvas.itemconfig(self._pause_a, state=pause_state)
         self._canvas.itemconfig(self._pause_b, state=pause_state)
@@ -230,25 +384,20 @@ class DotWindow:
         vals = [float(v) for v in wave][-WAVE_BARS:]
         if len(vals) < WAVE_BARS:
             vals = [0.0] * (WAVE_BARS - len(vals)) + vals
-        wave_x = PAD_PX + DOT_PX + PAD_PX
+        mid = WAVE_Y + WAVE_H / 2
+        half = WAVE_H / 2
         for i, item in enumerate(self._wave_items):
             unit = 0.0 if dim else meter_unit(vals[i], WAVE_FULL_RMS)
-            h = max(0, int(round(unit * WAVE_H)))
-            self._canvas.coords(
-                item,
-                wave_x + i * WAVE_BAR_W,
-                PAD_PX + WAVE_H - h,
-                wave_x + i * WAVE_BAR_W + WAVE_BAR_W - 1,
-                PAD_PX + WAVE_H,
-            )
+            h = max(0.0, unit * half)
+            x0 = self._wave_x0 + i * self._wave_bar_w
+            self._canvas.coords(item, x0, mid - h, x0 + self._wave_bar_w - 1, mid + h)
             self._canvas.itemconfig(item, fill=wave_color)
 
-        lane_x0 = PAD_PX
-        lane_span = WIN_W - PAD_PX * 2
-        lane_y0 = PAD_PX + DOT_PX + PAD_PX
+        lane_x0 = PAD_X
+        lane_span = WIN_W - PAD_X * 2
         lane_vals = list(lanes) + [0.0, 0.0, 0.0]
         for i, item in enumerate(self._lane_fill):
-            y = lane_y0 + i * (LANE_H + LANE_GAP)
+            y = LANE_Y0 + i * (LANE_H + LANE_GAP)
             unit = 0.0 if dim else meter_unit(lane_vals[i], LANE_FULL_RMS)
             w = max(0, int(round(unit * lane_span)))
             self._canvas.coords(item, lane_x0, y, lane_x0 + w, y + LANE_H)
@@ -262,6 +411,8 @@ class DotWindow:
         self.root.mainloop()
 
     def destroy(self) -> None:
+        if self._help_win is not None:
+            self._close_help(self._help_win)
         try:
             self.root.destroy()
         except Exception:

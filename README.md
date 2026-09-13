@@ -2,7 +2,7 @@
 
 **MAD = Meeting Atmosphere Dial.** **Light** = a signal / bulb — not “lite” as in a cut-down edition.
 
-While a meeting plays on this machine (Zoom, Teams, a browser tab), Mad Light watches the **monitor source of the default audio sink** — the same stream you already hear on headphones or speakers — and shows a **recording-indicator LED**: a tiny always-on-top colored **dot** (green / amber / red) from crude energy features (rolling RMS and its short-term slope), plus a compact scrolling level and three **activity lanes** (frequency bands of the mix).
+While a meeting plays on this machine (Zoom, Teams, a browser tab), Mad Light watches the **monitor source of the default audio sink** — the same stream you already hear on headphones or speakers — and shows a compact always-on-top **card**: a center heat circle (green / amber / red / idle grey) from crude energy features (rolling RMS and its short-term slope), a scrolling level, and three **activity lanes** (frequency bands of the mix).
 
 It is **not** a dashboard, **not** a labeled pill, **not** an emotion detector, **not** face reading, **not** speaker diarization, **not** a transcript, and it does not call a cloud API.
 
@@ -24,7 +24,7 @@ These are the north-star uses. They are why the light exists. **v0 still only sh
 
 ## How you get it
 
-1. **Runnable local app** — this repo, **Omarchy / Linux first**. Install, run `madlight`, watch the default-sink monitor. Compact LED + level + activity lanes.
+1. **Runnable local app** — this repo, **Omarchy / Linux first**. Install, run `madlight`, watch the default-sink monitor. Compact floating card: heat circle + level + activity lanes.
 2. **Spec for another agent** — give a coding agent **[SPEC.md](SPEC.md)** (“build Mad Light to this spec”). Optionally add [`.cursor/skills/mad-light/SKILL.md`](.cursor/skills/mad-light/SKILL.md). The expected result is a faithful **local dial + recording-indicator dot**, not the roadmap’s coach features.
 
 ## What it does
@@ -36,7 +36,7 @@ These are the north-star uses. They are why the light exists. **v0 still only sh
 | **red** | hot — high RMS |
 | **dark grey** | paused, or sustained near-silence (not listening / idle) |
 
-The overlay is a **compact strip**: a Zoom-pip-sized **dot**, a short scrolling level (the same capture blocks that feed heat), and **three thin activity lanes** (low / mid / high bands of the loopback mix). No speaker names. The tray icon mirrors the LED color. **Pause listening** is a click on the strip, Space / Escape, the right-click menu, or the tray. Pause **stops capture immediately** (same kill switch as `--text` `off` / `pause`).
+The overlay is a **compact floating card** (Voice Access–style chrome, not a dashboard): drag handle and close, a **center circle** for listening/heat, gear / help, a thin level under the circle, and **three activity lanes** (low / mid / high bands of the loopback mix). No speaker names. The tray icon mirrors the circle color. **Pause** is a click on the center circle (or Space / Escape / tray). Pause **stops capture immediately** (same kill switch as `--text` `off` / `pause`). Drag the handle or card to move; close quits.
 
 ## Privacy
 
@@ -108,7 +108,7 @@ Useful flags:
 | `--backend auto\|soundcard\|parec\|pw-record` | Capture backend |
 | `--rising-rms` `--hot-rms` `--rising-slope` | Thresholds (LED colors stay green / amber / red) |
 
-Pause / kill switch: click the strip (or Space / Escape), tray **Pause — stop listening**, right-click the LED, or in `--text` mode type `off` / `pause` / `q` + Enter (or Ctrl+C). Click-drag still moves the window.
+Pause / kill switch: click the **center circle** (or Space / Escape), tray **Pause — stop listening**, gear / right-click menu, or in `--text` mode type `off` / `pause` / `q` + Enter (or Ctrl+C). Drag the handle (or the card) to move. Help explains colors and that lanes are bands, not speakers.
 
 ### Activity lanes ≠ speakers
 
@@ -160,8 +160,9 @@ madlight --demo --text
 
 # 3. Synthetic GUI (no meeting):
 madlight --demo --no-tray
-# grey while silent or paused; green/amber/red when energy;
-# waveform scrolls; three activity lanes move independently
+# floating card: grey center when silent or paused; green/amber/red when energy;
+# waveform under the circle; three activity lanes move independently
+# click the center to pause / resume; × closes
 
 # 4. Real playback through headphones:
 #    play a video locally, default sink = headphones, then:
