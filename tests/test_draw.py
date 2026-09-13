@@ -7,11 +7,12 @@ from madlight.draw import (
     aa_disc,
     aa_gear,
     aa_help,
+    compose_center,
     edge_alpha_values,
     paste_centered,
     rgba,
 )
-from madlight.faces import FACE_CALM, FACE_PX, load_face_image
+from madlight.faces import FACE_CALM, FACE_PX, load_face_image, load_headphone_image
 from madlight.ui import CIRCLE_IMG_PX, DOT_PX, PALETTE
 from madlight.heat import HeatLevel
 
@@ -69,6 +70,28 @@ def test_face_composites_crisp_on_aa_disc() -> None:
     disc_mid = disc.getpixel((CIRCLE_IMG_PX // 2, CIRCLE_IMG_PX // 2))
     assert mid != disc_mid
     assert mid[3] == 255
+
+
+def test_compose_center_wears_headphones_when_listening() -> None:
+    disc = aa_disc(CIRCLE_IMG_PX, PALETTE[HeatLevel.CALM], outline=PALETTE[HeatLevel.CALM])
+    face = load_face_image(FACE_CALM, FACE_PX)
+    on = load_headphone_image(True)
+    off = load_headphone_image(False)
+    assert face is not None and on is not None and off is not None
+    listening = compose_center(disc, face=face, headphones=on, listening=True)
+    paused = compose_center(disc, face=None, headphones=off, listening=False)
+    assert listening.size == disc.size == paused.size
+    # Soft AA fringe is still there after the overlay.
+    assert any(0 < a < 255 for a in edge_alpha_values(listening))
+    assert any(0 < a < 255 for a in edge_alpha_values(paused))
+    # Worn vs set-aside are glanceably different.
+    assert listening.tobytes() != paused.tobytes()
+    # Listening still has the face in the middle (not just a headset).
+    face_only = paste_centered(disc, face)
+    mid = listening.getpixel((CIRCLE_IMG_PX // 2, CIRCLE_IMG_PX // 2))
+    assert mid == face_only.getpixel((CIRCLE_IMG_PX // 2, CIRCLE_IMG_PX // 2))
+    # Paused middle is the off headset, not a blushy face.
+    assert paused.getpixel((CIRCLE_IMG_PX // 2, CIRCLE_IMG_PX // 2)) != mid
 
 
 def test_rgba_parses_hex() -> None:

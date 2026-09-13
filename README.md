@@ -2,13 +2,13 @@
 
 **MAD = Meeting Atmosphere Dial.** **Light** = a signal / bulb — not “lite” as in a cut-down edition.
 
-While a meeting plays on this machine (Zoom, Teams, a browser tab), Mad Light watches the **monitor source of the default audio sink** — the same stream you already hear on headphones or speakers — and shows a compact always-on-top **card**: a center heat circle (green / amber / red / idle grey) with a **color face** (bundled Twemoji PNG), plus one scrolling **speech-energy** strip. Optional frequency-band meters stay behind the gear.
+While a meeting plays on this machine (Zoom, Teams, a browser tab), Mad Light watches the **monitor source of the default audio sink** — the same stream you already hear on headphones or speakers — and shows a compact always-on-top **card**: a center heat circle (green / amber / red / idle grey) with a **simple color face** (bundled Twemoji PNG) and a **headphone badge** (on = listening, off / set aside = paused), plus one scrolling **speech-energy** strip. Optional frequency-band meters stay behind the gear.
 
 It is **not** a dashboard, **not** a labeled pill, **not** an emotion detector, **not** face reading, **not** speaker diarization, **not** a transcript, and it does not call a cloud API.
 
 This tree is **v0 only** — the atmosphere dial. The **clarity / facilitator** work (“point landed?”, reframe, a tiny commandments-style framework) is **v2+** in **[ROADMAP.md](ROADMAP.md)**. It is not implemented here. Rebuild v0 from **[SPEC.md](SPEC.md)**.
 
-License: [MIT](LICENSE). Center faces are [Twemoji](https://github.com/jdecked/twemoji) PNGs (© Twitter, Inc and contributors, [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/)) — see [madlight/assets/NOTICE](madlight/assets/NOTICE). Classic Tk cannot render color emoji on Windows, so the circle composites those PNGs with Pillow instead of `create_text`. README is written so the repo can go public later; that timing is undecided.
+License: [MIT](LICENSE). Center faces and the headphone badge are [Twemoji](https://github.com/jdecked/twemoji) PNGs (© Twitter, Inc and contributors, [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/)) — see [madlight/assets/NOTICE](madlight/assets/NOTICE). Classic Tk cannot render color emoji on Windows, so the circle composites those PNGs with Pillow instead of `create_text`. README is written so the repo can go public later; that timing is undecided.
 
 UI ancestor: [The Point](https://github.com/parth4/point-overlay) is inspiration only. This repo does not copy that YouTube / manual engine.
 
@@ -24,20 +24,22 @@ These are the north-star uses. They are why the light exists. **v0 still only sh
 
 ## How you get it
 
-1. **Runnable local app** — this repo, **Omarchy / Linux first**. Install, run `madlight`, watch the default-sink monitor. Compact floating card: heat circle + face + one energy strip.
+1. **Runnable local app** — this repo, **Omarchy / Linux first**. Install, run `madlight`, watch the default-sink monitor. Compact floating card: heat circle + simple 🙂 face + headphone on/off + one energy strip.
 2. **Spec for another agent** — give a coding agent **[SPEC.md](SPEC.md)** (“build Mad Light to this spec”). Optionally add [`.cursor/skills/mad-light/SKILL.md`](.cursor/skills/mad-light/SKILL.md). The expected result is a faithful **local dial + recording-indicator dot**, not the roadmap’s coach features.
 
 ## What it does
 
-| Face + circle | Meaning (energy only) |
+| Face + headphones + circle | Meaning (energy only) |
 | --- | --- |
-| **😊 green** | listening, calm — steady low-but-present energy |
-| **😬 amber** | listening, rising — mid energy, or energy climbing |
-| **😡 red** | listening, hot — high RMS |
-| **😊 dark grey** | listening, near-silence (armed — still capturing) |
-| **🤐 dark grey** | paused — not listening, capture off |
+| **🙂 🎧 on, green** | listening, calm — typical slight smile, no blush |
+| **😬 🎧 on, amber** | listening, rising — mid energy, or energy climbing |
+| **😡 🎧 on, red** | listening, hot — high RMS |
+| **🙂 🎧 on, dark grey** | listening, near-silence (armed — still capturing) |
+| **🎧 off / down, dark grey** | paused — not listening, capture off |
 
-The overlay is a **compact floating card** (Voice Access–style chrome, not a dashboard): **Tune + / −** (this heat feels right / wrong), drag handle, close, a **center face** (click = pause ↔ listen), gear / help, and **one waveform** under the circle. There are **no** fixed “3 voice” lines on the default card. The tray icon mirrors the circle color. **Pause** is a click on the center face (Space is an optional shortcut; also Escape / tray). Pause **stops capture immediately** (same kill switch as `--text` `off` / `pause`). Drag the handle or card to move; close quits.
+Headphones **on** the circle means the dial is listening. Headphones **down / set aside** means paused. Click the center to toggle. Calm is a simple 🙂 — not a blushy 😊. Rising 😬 and hot 😡 stay the glanceable heat arc.
+
+The overlay is a **compact floating card** (Voice Access–style chrome, not a dashboard): **Tune + / −** (this heat feels right / wrong), drag handle, close, a **center circle** (click = pause ↔ listen), gear / help, and **one waveform** under the circle. There are **no** fixed “3 voice” lines on the default card. The tray icon mirrors the circle color. **Pause** is a click on the center (Space is an optional shortcut; also Escape / tray). Pause **stops capture immediately** (same kill switch as `--text` `off` / `pause`). Drag the handle or card to move; close quits.
 
 **Tuning** is the self-improve path — not hidden: the chrome says **Tune**, +/− flash when you rate the heat, hover tips explain them, and the **gear** opens a Tuning panel (sensitivity: lower / default / higher). Help documents the same. Ratings and sensitivity write **local** files only — no audio, no cloud.
 
@@ -119,7 +121,7 @@ Useful flags:
 | `--backend auto\|soundcard\|parec\|pw-record` | Capture backend |
 | `--rising-rms` `--hot-rms` `--rising-slope` | Thresholds (LED colors stay green / amber / red) |
 
-Pause / kill switch: click the **center face** (or Space / Escape), tray **Pause — stop listening**, gear / right-click **Tuning…**, or in `--text` mode type `off` / `pause` / `q` + Enter (or Ctrl+C). Drag the handle (or the card) to move. Help explains faces, Tuning, and that the strip is energy — not voices.
+Pause / kill switch: click the **center circle** (or Space / Escape), tray **Pause — stop listening**, gear / right-click **Tuning…**, or in `--text` mode type `off` / `pause` / `q` + Enter (or Ctrl+C). Headphones on the circle = listening; headphones off = paused. Drag the handle (or the card) to move. Help explains faces, headphones, Tuning, and that the strip is energy — not voices.
 
 ### One energy strip — not voices
 
@@ -173,10 +175,11 @@ madlight --demo --text
 
 # 3. Synthetic GUI (no meeting):
 madlight --demo --no-tray
-# floating card: grey + 😊 when silent (still listening); grey + 🤐 when paused;
-# green/amber/red + 😊/😬/😡 when energy;
+# floating card: grey + 🙂 + 🎧 on when silent (still listening);
+# grey + 🎧 off / set aside when paused;
+# green/amber/red + 🙂/😬/😡 + 🎧 on when energy;
 # one waveform under the face (no 3-band “voices” unless you enable them in Tuning)
-# click the center face to pause / resume; Tune +/− rates the heat; × closes
+# click the center to pause / resume; Tune +/− rates the heat; × closes
 
 # 4. Real playback through headphones:
 #    play a video locally, default sink = headphones, then:
@@ -209,7 +212,7 @@ Defaults target **2–5 person video calls** on a hot loopback / loud meeting ma
 - climb must hold `rise_dwell_seconds = 1.2` before calm→rising; density already integrates over the 2 s window
 - meters: one waveform bar every 6 blocks (~300 ms); incoming RMS uses EMA 0.12; optional band meters use EMA 0.08 (slower than the previous stride-3 / 0.16 defaults)
 
-`--text` prints `rms`, `slope`, and dBFS so you can nudge `--rising-rms` / `--hot-rms` / `--rising-slope`. Or use **Tune + / −** and gear **Tuning** (sensitivity) on the card. Quiet Linux headphone mixes may need **lower** flags; a still-hotter Windows loopback may need **higher** ones. Idle listening vs paused are the same grey, different faces (😊 armed vs 🤐 muted).
+`--text` prints `rms`, `slope`, and dBFS so you can nudge `--rising-rms` / `--hot-rms` / `--rising-slope`. Or use **Tune + / −** and gear **Tuning** (sensitivity) on the card. Quiet Linux headphone mixes may need **lower** flags; a still-hotter Windows loopback may need **higher** ones. Idle listening vs paused are the same grey; headphones on (🙂 armed) vs headphones off (cans set aside).
 
 ## Windows
 
@@ -225,7 +228,7 @@ Loopback gain is often much hotter than a Linux headphone sink (meeting mix near
 madlight --backend soundcard --rising-rms 0.10 --rising-slope 0.16 --hot-rms 0.26 --text
 ```
 
-If the LED never leaves green on a quiet headset mix, lower `--rising-rms` / `--hot-rms` instead — or open **Tuning** and pick **Higher** sensitivity. Use `--demo` first if you want to see grey (silence / pause), heat colors, **crisp color faces**, and the energy strip without a meeting. The heat disc (and gear / help) is a 4× Pillow ellipse composited with those Twemoji PNGs — not a Tk `create_oval` — so the ring stays smooth on Windows. The center uses bundled Twemoji PNGs (not Segoe/Noto emoji fonts) so Windows shows the same color faces as Linux. Tray may be missing on some desktops; click the face (or Space) still pauses.
+If the LED never leaves green on a quiet headset mix, lower `--rising-rms` / `--hot-rms` instead — or open **Tuning** and pick **Higher** sensitivity. Use `--demo` first if you want to see grey (silence / pause), heat colors, **crisp color faces + headphone on/off**, and the energy strip without a meeting. The heat disc (and gear / help) is a 4× Pillow ellipse composited with those Twemoji PNGs — not a Tk `create_oval` — so the ring stays smooth on Windows. The center uses bundled Twemoji PNGs (not Segoe/Noto emoji fonts) so Windows shows the same simple 🙂 / 😬 / 😡 faces and 🎧 badge as Linux. Tray may be missing on some desktops; click the center (or Space) still pauses.
 
 ## PyInstaller (optional)
 

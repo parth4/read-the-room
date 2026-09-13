@@ -18,12 +18,17 @@ from madlight.faces import (
     FACE_CALM,
     FACE_FILES,
     FACE_HOT,
-    FACE_PAUSED,
     FACE_PX,
     FACE_RISING,
+    HEADPHONE_OFF,
+    HEADPHONE_ON,
+    HEADPHONES_DIR,
     face_for,
     face_png_path,
+    headphone_for,
+    headphone_png_path,
     load_face_image,
+    load_headphone_image,
 )
 from madlight.heat import HeatLevel, LANE_LABELS
 from madlight.ui import (
@@ -74,19 +79,21 @@ def test_led_fill_idle_and_paused_are_gray() -> None:
     assert led_fill(listening=True, idle=False, level=HeatLevel.HOT) == PALETTE[HeatLevel.HOT]
 
 
-def test_face_for_maps_listen_heat_and_pause() -> None:
-    assert face_for(listening=False, idle=True, level=HeatLevel.HOT) == FACE_PAUSED
-    assert face_for(listening=False, idle=False, level=HeatLevel.CALM) == FACE_PAUSED
+def test_face_for_maps_listen_heat_and_drops_face_when_paused() -> None:
+    assert face_for(listening=False, idle=True, level=HeatLevel.HOT) is None
+    assert face_for(listening=False, idle=False, level=HeatLevel.CALM) is None
     assert face_for(listening=True, idle=True, level=HeatLevel.CALM) == FACE_CALM
     assert face_for(listening=True, idle=True, level=HeatLevel.HOT) == FACE_CALM
     assert face_for(listening=True, idle=False, level=HeatLevel.CALM) == FACE_CALM
     assert face_for(listening=True, idle=False, level=HeatLevel.RISING) == FACE_RISING
     assert face_for(listening=True, idle=False, level=HeatLevel.HOT) == FACE_HOT
-    assert FACE_CALM == "😊"
+    assert FACE_CALM == "🙂"
     assert FACE_RISING == "😬"
     assert FACE_HOT == "😡"
-    assert FACE_PAUSED == "🤐"
-    assert FACE_CALM != FACE_PAUSED
+    assert "😊" not in (FACE_CALM, FACE_RISING, FACE_HOT)
+    assert headphone_for(listening=True) == HEADPHONE_ON
+    assert headphone_for(listening=False) == HEADPHONE_OFF
+    assert HEADPHONE_ON != HEADPHONE_OFF
 
 
 def test_face_asset_pngs_exist_and_load() -> None:
@@ -94,12 +101,16 @@ def test_face_asset_pngs_exist_and_load() -> None:
     text = notice.read_text(encoding="utf-8")
     assert "Twemoji" in text
     assert "CC-BY 4.0" in text
+    assert "1f642" in text
+    assert "1f3a7" in text
+    assert "1f60a" not in text
+    assert "1f910" not in text
     assert FACE_FILES == {
         FACE_CALM: "calm.png",
         FACE_RISING: "rising.png",
         FACE_HOT: "hot.png",
-        FACE_PAUSED: "paused.png",
     }
+    assert not (ASSETS_DIR / "paused.png").exists()
     for glyph, name in FACE_FILES.items():
         path = face_png_path(glyph)
         assert path is not None and path.is_file(), name
@@ -112,6 +123,27 @@ def test_face_asset_pngs_exist_and_load() -> None:
         assert scaled is not None and scaled.size == (24, 24)
     assert load_face_image("not-a-face") is None
     assert face_png_path("not-a-face") is None
+
+
+def test_headphone_assets_on_and_off_are_distinct() -> None:
+    notice = (HEADPHONES_DIR.parent / "NOTICE").read_text(encoding="utf-8")
+    assert "headphones/on.png" in notice
+    assert "headphones/off.png" in notice
+    on_path = headphone_png_path(True)
+    off_path = headphone_png_path(False)
+    assert on_path is not None and on_path.is_file()
+    assert off_path is not None and off_path.is_file()
+    on_img = load_headphone_image(True)
+    off_img = load_headphone_image(False)
+    assert on_img is not None and off_img is not None
+    assert on_img.mode == "RGBA" and off_img.mode == "RGBA"
+    assert on_img.size[0] > off_img.size[0]
+    worn = load_headphone_image(True, 26)
+    aside = load_headphone_image(False, 26)
+    assert worn is not None and aside is not None
+    assert worn.tobytes() != aside.tobytes()
+    assert load_headphone_image(True, 24) is not None
+    assert load_headphone_image(False, 24) is not None
 
 
 def test_center_ink_and_ring() -> None:
@@ -166,8 +198,8 @@ def test_dot_window_paints_faces_and_center_toggles() -> None:
         assert "center" in win._canvas.gettags(win._face)
         assert "center" in win._canvas.gettags(win._led)
         assert win._face_glyph == FACE_CALM
-        assert win._face_photos[FACE_CALM] is not None
-        assert win._led_photos[(PALETTE["off"], ICON_DIM)] is not None
+        assert win._phones_mode == HEADPHONE_ON
+        assert (PALETTE["off"], ICON_DIM, FACE_CALM, True) in win._center_photos
         assert win._fallback_items == []
         assert win._canvas.itemcget(win._lane_fill[0], "state") == "hidden"
 
@@ -182,17 +214,20 @@ def test_dot_window_paints_faces_and_center_toggles() -> None:
         assert win._led_fill == PALETTE[HeatLevel.HOT]
         assert win._led_ring_color == PALETTE[HeatLevel.HOT]
         assert win._face_glyph == FACE_HOT
+        assert win._phones_mode == HEADPHONE_ON
 
         win.set_state(HeatLevel.RISING, True, idle=False, wave=[0.1] * 8)
         win.root.update_idletasks()
         assert win._face_glyph == FACE_RISING
+        assert win._phones_mode == HEADPHONE_ON
         assert win._led_fill == PALETTE[HeatLevel.RISING]
 
         win.set_state(HeatLevel.HOT, False, idle=True, wave=[0.2] * 28, lanes=(0.1, 0.1, 0.1))
         win.root.update_idletasks()
         assert win._led_fill == PALETTE["off"]
         assert win._led_ring_color == CARD_EDGE
-        assert win._face_glyph == FACE_PAUSED
+        assert win._face_glyph is None
+        assert win._phones_mode == HEADPHONE_OFF
 
         assert win.hit_test(8, 8) == "tune"
         assert win.hit_test(46, 8) == "up"
@@ -217,12 +252,14 @@ def test_dot_window_paints_faces_and_center_toggles() -> None:
         _click(win, cx, cy)
         assert hits == ["toggle"]
         assert win._face_glyph == FACE_CALM  # press flipped pause→listen
+        assert win._phones_mode == HEADPHONE_ON
 
         hits.clear()
         win._last_toggle = -1.0
         _click(win, cx, cy)
         assert hits == ["toggle"]
-        assert win._face_glyph == FACE_PAUSED
+        assert win._face_glyph is None
+        assert win._phones_mode == HEADPHONE_OFF
         assert win._canvas.itemcget(win._wave_items[0], "fill") == "#3F3F3F"
 
         # Hold/release must not toggle a second time (debounce + click latch).
