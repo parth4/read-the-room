@@ -30,7 +30,6 @@ LABEL = {
 DOT_PX = 16
 PAD_PX = 3
 WIN_PX = DOT_PX + PAD_PX * 2
-CHROMA = "#FF00FF"
 
 
 def make_icon(level: HeatLevel | None, size: int = 64) -> Image.Image:
@@ -58,17 +57,14 @@ class DotWindow:
         self._on_quit = on_quit
         self.root = tk.Tk()
         self.root.title("Mad Light")
-        self.root.configure(bg=CHROMA)
+        # Tiny dark bezel. No chroma-key: failed transparency must not become a pink square.
+        self.root.configure(bg=RING)
         try:
             self.root.attributes("-topmost", True)
         except tk.TclError:
             pass
         try:
             self.root.overrideredirect(True)
-        except tk.TclError:
-            pass
-        try:
-            self.root.wm_attributes("-transparentcolor", CHROMA)
         except tk.TclError:
             pass
         self.root.resizable(False, False)
@@ -80,7 +76,7 @@ class DotWindow:
             self.root,
             width=WIN_PX,
             height=WIN_PX,
-            bg=CHROMA,
+            bg=RING,
             highlightthickness=0,
             bd=0,
         )
