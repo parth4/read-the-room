@@ -1,18 +1,20 @@
 # Roadmap
 
-Mad Lite’s product arc is **local meeting facilitation cues**, not a cloud note-taker and not a Zoom competitor.
+Mad Light’s product arc is **local meeting facilitation cues**, not a cloud note-taker and not a Zoom competitor.
+
+**Light** means a signal / bulb (the LED), not a “lite” edition.
 
 This file is direction, not a schedule. **v0 is what this repo ships.** Later versions stay out of the v0 tree until they earn their own slice.
 
-License: **MIT** (see [LICENSE](LICENSE)). The repo is written as if it will be public: fork it, credit it, bake pieces in.
+License: **MIT** (see [LICENSE](LICENSE)). Docs are open-source ready; whether or when the repo goes public is undecided.
 
 ## v0 — Atmosphere Dial (now)
 
-A tiny local heat pill: **calm / rising / hot** from crude monitor-sink audio (RMS + short-term energy slope).
+A single always-on-top **recording-indicator LED**: **green / amber / red** (calm / rising / hot) from crude monitor-sink audio (RMS + short-term energy slope). Tray icon mirrors the colors. Kill/off is on the tray.
 
 - Offline. No cloud API in the audio path.
 - Default: **do not write audio or transcripts to disk.**
-- Not emotion labels, not faces, not ASR.
+- Not emotion labels, not faces, not ASR, not a dashboard.
 - Kill switch stops capture.
 
 That is the whole v0 product. Install and run it; do not wait for v1.
@@ -23,7 +25,7 @@ Same machine, same “what you already hear” capture. Add **more audio feature
 
 - Talk-over / pile-on (energy stacking, not speaker ID).
 - Interrupt-ish spikes vs a steady floor.
-- Maybe a second pill or a small badge: *stacking* vs *one voice*.
+- Maybe a second **pip** or a blink pattern: *stacking* vs *one voice* — still not a panel.
 
 Still no Whisper, no cloud, no “who said what.” If a cue needs words, it is not v1.
 
@@ -39,7 +41,7 @@ This is a **facilitator / coach**, not a meeting note-taker:
 
 The Point (the overlay) is ancestor inspiration only. v2 should not copy that YouTube/manual engine. “Point landed?” will be a **cue**, not a claim that we read minds or faces.
 
-v0/v1 energy features may feed v2. **Do not grow the v0 heat dial into this.**
+v0/v1 energy features may feed v2. **Do not grow the v0 LED into this.**
 
 ## v3 — Dual local guides (opt-in both sides)
 
@@ -58,7 +60,7 @@ A small, boring interface so **Zoom, Teams, a browser app, or a plugin** *can* s
 Honest limits:
 
 - Publishing hooks does **not** mean Zoom or Teams will adopt them.
-- Success is **copyable**: open source for awareness and credit; a product owner **may** bake the framework or the dial into their own client.
+- Success is **copyable**: if this is public, awareness and credit; a product owner **may** bake the framework or the dial into their own client.
 - Keep the core license permissive (MIT) so “bake in” is legally easy. Ask for attribution; do not expect a vendor program.
 
 ## Non-goals (unless a later version says otherwise)

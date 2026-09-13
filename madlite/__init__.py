@@ -1,4 +1,6 @@
-"""Mad Lite — Meeting Atmosphere Dial."""
+"""Compatibility alias — the package is `madlight` (Mad Light)."""
 
-__version__ = "0.1.0"
+from madlight import *  # noqa: F403
+from madlight import __version__
+
 __all__ = ["__version__"]

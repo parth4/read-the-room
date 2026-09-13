@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from madlite.audio import (
+from madlight.audio import (
     CaptureError,
     DemoCapture,
     MonitorSource,
@@ -13,7 +13,7 @@ from madlite.audio import (
     parse_pactl_short_sources,
     parse_pactl_sink_monitor,
 )
-from madlite.heat import HeatClassifier, HeatConfig, HeatLevel
+from madlight.heat import HeatClassifier, HeatConfig, HeatLevel
 
 
 SHORT_SOURCES = """\

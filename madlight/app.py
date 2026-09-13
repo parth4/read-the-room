@@ -1,4 +1,4 @@
-"""CLI and runtime: capture → heat → pill / tray / text."""
+"""CLI and runtime: capture → heat → LED / tray / text."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ import threading
 import time
 from dataclasses import dataclass, field, replace
 
-from madlite import __version__
-from madlite.audio import (
+from madlight import __version__
+from madlight.audio import (
     CaptureError,
     DemoCapture,
     MonitorSource,
@@ -18,7 +18,7 @@ from madlite.audio import (
     list_monitor_sources,
     open_capture,
 )
-from madlite.heat import HeatClassifier, HeatConfig, HeatLevel, HeatSample
+from madlight.heat import HeatClassifier, HeatConfig, HeatLevel, HeatSample
 
 
 @dataclass
@@ -54,13 +54,14 @@ class Runtime:
 
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="madlite",
+        prog="madlight",
         description=(
-            "Mad Lite — Meeting Atmosphere Dial. Local RMS/slope heat pill. "
-            "Captures the default sink monitor (headphones or speakers), never the cloud."
+            "Mad Light — Meeting Atmosphere Dial. Local RMS/slope heat LED "
+            "(recording-indicator dot). Captures the default sink monitor "
+            "(headphones or speakers), never the cloud."
         ),
     )
-    p.add_argument("--version", action="version", version=f"madlite {__version__}")
+    p.add_argument("--version", action="version", version=f"madlight {__version__}")
     p.add_argument(
         "--list-sources",
         action="store_true",
@@ -92,7 +93,8 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print heat on stdout instead of (or as well as) GUI if GUI fails",
     )
-    p.add_argument("--no-pill", action="store_true", help="do not open the Tk pill")
+    p.add_argument("--no-dot", action="store_true", help="do not open the Tk LED")
+    p.add_argument("--no-pill", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--no-tray", action="store_true", help="do not start the tray icon")
     p.add_argument("--rising-rms", type=float, default=None)
     p.add_argument("--hot-rms", type=float, default=None)
@@ -199,7 +201,7 @@ def _format_line(runtime: Runtime) -> str:
 
 def _text_loop(runtime: Runtime) -> None:
     print(
-        f"Mad Lite {__version__}  source={runtime.source_label or '(starting)'}  "
+        f"Mad Light {__version__}  source={runtime.source_label or '(starting)'}  "
         "q+enter or Ctrl+C to quit; 'off' toggles the kill switch",
         flush=True,
     )
@@ -214,7 +216,7 @@ def _text_loop(runtime: Runtime) -> None:
                 with runtime.lock:
                     runtime.listening = not runtime.listening
 
-    threading.Thread(target=stdin_watch, name="madlite-stdin", daemon=True).start()
+    threading.Thread(target=stdin_watch, name="madlight-stdin", daemon=True).start()
     last = ""
     while not runtime.stopped():
         line = _format_line(runtime)
@@ -224,8 +226,8 @@ def _text_loop(runtime: Runtime) -> None:
         time.sleep(0.15)
 
 
-def _run_gui(runtime: Runtime, *, pill: bool, tray: bool) -> bool:
-    pill_win = None
+def _run_gui(runtime: Runtime, *, dot: bool, tray: bool) -> bool:
+    dot_win = None
     tray_ctl = None
 
     def toggle_off() -> None:
@@ -234,44 +236,44 @@ def _run_gui(runtime: Runtime, *, pill: bool, tray: bool) -> bool:
 
     def quit_app() -> None:
         runtime.request_stop()
-        if pill_win is not None:
-            pill_win.destroy()
+        if dot_win is not None:
+            dot_win.destroy()
         if tray_ctl is not None:
             tray_ctl.stop()
 
-    if pill:
+    if dot:
         try:
-            from madlite.ui import PillWindow
+            from madlight.ui import DotWindow
 
-            pill_win = PillWindow(
+            dot_win = DotWindow(
                 on_off=toggle_off,
                 on_quit=quit_app,
             )
         except Exception as exc:
-            print(f"pill unavailable ({exc})", file=sys.stderr)
-            pill_win = None
+            print(f"LED unavailable ({exc})", file=sys.stderr)
+            dot_win = None
 
     if tray:
         try:
-            from madlite.ui import TrayController
+            from madlight.ui import TrayController
         except Exception as exc:
             print(f"tray unavailable ({exc})", file=sys.stderr)
             tray = False
         else:
-            def show_pill() -> None:
-                if pill_win is None:
+            def show_dot() -> None:
+                if dot_win is None:
                     return
                 try:
-                    pill_win.root.deiconify()
-                    pill_win.root.lift()
-                    pill_win.root.attributes("-topmost", True)
+                    dot_win.root.deiconify()
+                    dot_win.root.lift()
+                    dot_win.root.attributes("-topmost", True)
                 except Exception:
                     pass
 
             tray_ctl = TrayController(
                 on_off=toggle_off,
                 on_quit=quit_app,
-                on_show_pill=None if pill_win is None else show_pill,
+                on_show_dot=None if dot_win is None else show_dot,
                 get_listening=lambda: runtime.snapshot()[0],
                 get_level=lambda: runtime.snapshot()[1],
             )
@@ -281,7 +283,7 @@ def _run_gui(runtime: Runtime, *, pill: bool, tray: bool) -> bool:
                 print(f"tray failed to start ({exc})", file=sys.stderr)
                 tray_ctl = None
 
-    if pill_win is None and tray_ctl is None:
+    if dot_win is None and tray_ctl is None:
         return False
 
     def tick() -> None:
@@ -289,16 +291,16 @@ def _run_gui(runtime: Runtime, *, pill: bool, tray: bool) -> bool:
             quit_app()
             return
         listening, level, _sample, _err = runtime.snapshot()
-        if pill_win is not None:
-            pill_win.set_state(level, listening)
-            pill_win.after(120, tick)
+        if dot_win is not None:
+            dot_win.set_state(level, listening)
+            dot_win.after(120, tick)
         if tray_ctl is not None:
             tray_ctl.update()
 
-    if pill_win is not None:
-        pill_win.after(120, tick)
+    if dot_win is not None:
+        dot_win.after(120, tick)
         try:
-            pill_win.mainloop()
+            dot_win.mainloop()
         finally:
             runtime.request_stop()
             if tray_ctl is not None:
@@ -347,13 +349,14 @@ def main(argv: list[str] | None = None) -> int:
     worker = threading.Thread(
         target=_audio_loop,
         args=(runtime, config, source, backend),
-        name="madlite-audio",
+        name="madlight-audio",
         daemon=True,
     )
     worker.start()
 
+    show_dot = not (args.no_dot or args.no_pill)
     if not args.text:
-        if _run_gui(runtime, pill=not args.no_pill, tray=not args.no_tray):
+        if _run_gui(runtime, dot=show_dot, tray=not args.no_tray):
             runtime.request_stop()
             worker.join(timeout=2.0)
             return 0

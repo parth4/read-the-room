@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from madlite.heat import (
+from madlight.heat import (
     HeatClassifier,
     HeatConfig,
     HeatLevel,

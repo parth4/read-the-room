@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import subprocess
 import sys
-import time
 
 
 def test_module_help_exits_zero() -> None:
     proc = subprocess.run(
-        [sys.executable, "-m", "madlite", "--help"],
+        [sys.executable, "-m", "madlight", "--help"],
         check=False,
         capture_output=True,
         text=True,
@@ -15,11 +14,13 @@ def test_module_help_exits_zero() -> None:
     assert proc.returncode == 0
     assert "Meeting Atmosphere Dial" in proc.stdout
     assert "--list-sources" in proc.stdout
+    assert "Mad Light" in proc.stdout
+    assert "heat pill" not in proc.stdout.lower()
 
 
 def test_list_sources_does_not_crash_without_pulse() -> None:
     proc = subprocess.run(
-        [sys.executable, "-m", "madlite", "--list-sources"],
+        [sys.executable, "-m", "madlight", "--list-sources"],
         check=False,
         capture_output=True,
         text=True,
@@ -32,10 +33,21 @@ def test_list_sources_does_not_crash_without_pulse() -> None:
 
 def test_version() -> None:
     proc = subprocess.run(
+        [sys.executable, "-m", "madlight", "--version"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0
+    assert "madlight" in proc.stdout
+
+
+def test_legacy_module_alias() -> None:
+    proc = subprocess.run(
         [sys.executable, "-m", "madlite", "--version"],
         check=False,
         capture_output=True,
         text=True,
     )
     assert proc.returncode == 0
-    assert "madlite" in proc.stdout
+    assert "madlight" in proc.stdout

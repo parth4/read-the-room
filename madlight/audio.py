@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from madlite.heat import HeatConfig
+from madlight.heat import HeatConfig
 
 
 class CaptureError(RuntimeError):
@@ -141,7 +141,7 @@ def _refuse_mic(source: MonitorSource, *, allow_non_monitor: bool) -> MonitorSou
         return source
     raise CaptureError(
         f"{source.pulse_name!r} does not look like a sink monitor. "
-        "Mad Lite will not open a microphone unless you pass --allow-mic."
+        "Mad Light will not open a microphone unless you pass --allow-mic."
     )
 
 
@@ -165,9 +165,9 @@ def discover_monitor(
     hint = (
         "Could not find a monitor source for the default sink.\n"
         "  • Make headphones (or speakers) the default output: pactl get-default-sink\n"
-        "  • List monitors: madlite --list-sources\n"
-        "  • Then: madlite --source <name.monitor>\n"
-        "Mad Lite does not fall back to the microphone."
+        "  • List monitors: madlight --list-sources\n"
+        "  • Then: madlight --source <name.monitor>\n"
+        "Mad Light does not fall back to the microphone."
     )
     raise CaptureError(hint + "\n\nTried:\n  - " + "\n  - ".join(errors))
 
