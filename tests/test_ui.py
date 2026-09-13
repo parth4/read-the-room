@@ -6,6 +6,13 @@ import os
 
 import pytest
 
+try:
+    import tkinter as _tkinter  # noqa: F401
+
+    _HAS_TK = True
+except ModuleNotFoundError:
+    _HAS_TK = False
+
 from madlight.faces import (
     ASSETS_DIR,
     FACE_CALM,
@@ -140,7 +147,7 @@ def _click(win, x: int, y: int) -> None:
     win.root.update()
 
 
-@pytest.mark.skipif(not os.environ.get("DISPLAY"), reason="no display")
+@pytest.mark.skipif(not os.environ.get("DISPLAY") or not _HAS_TK, reason="no display/tk")
 def test_dot_window_paints_faces_and_center_toggles() -> None:
     from madlight.ui import DotWindow
 
@@ -250,7 +257,7 @@ def test_dot_window_paints_faces_and_center_toggles() -> None:
         win.destroy()
 
 
-@pytest.mark.skipif(not os.environ.get("DISPLAY"), reason="no display")
+@pytest.mark.skipif(not os.environ.get("DISPLAY") or not _HAS_TK, reason="no display/tk")
 def test_missing_face_png_falls_back_and_center_still_hits(monkeypatch: pytest.MonkeyPatch) -> None:
     import madlight.ui as ui_mod
 
@@ -268,7 +275,7 @@ def test_missing_face_png_falls_back_and_center_still_hits(monkeypatch: pytest.M
         win.destroy()
 
 
-@pytest.mark.skipif(not os.environ.get("DISPLAY"), reason="no display")
+@pytest.mark.skipif(not os.environ.get("DISPLAY") or not _HAS_TK, reason="no display/tk")
 def test_band_meters_are_opt_in() -> None:
     from madlight.ui import DotWindow
 
