@@ -8,11 +8,18 @@ import pytest
 
 from madlight.heat import HeatLevel, LANE_LABELS
 from madlight.ui import (
+    CARD_EDGE,
+    ICON_DIM,
     DOT_PX,
     LANE_COUNT,
+    MARK_ON_GRAY,
+    MARK_ON_HEAT,
     PALETTE,
     WIN_H,
     WIN_W,
+    center_mark,
+    center_mark_fill,
+    center_ring,
     center_xy,
     led_fill,
     meter_unit,
@@ -44,6 +51,17 @@ def test_led_fill_idle_and_paused_are_gray() -> None:
     assert led_fill(listening=True, idle=False, level=HeatLevel.HOT) == PALETTE[HeatLevel.HOT]
 
 
+def test_center_mark_splits_pause_from_listen() -> None:
+    assert center_mark(listening=False) == "pause"
+    assert center_mark(listening=True) == "mic"
+    assert center_mark_fill(listening=False, idle=True) == MARK_ON_GRAY
+    assert center_mark_fill(listening=True, idle=True) == MARK_ON_GRAY
+    assert center_mark_fill(listening=True, idle=False) == MARK_ON_HEAT
+    assert center_ring(listening=False, idle=True, level=HeatLevel.HOT) == CARD_EDGE
+    assert center_ring(listening=True, idle=True, level=HeatLevel.CALM) == ICON_DIM
+    assert center_ring(listening=True, idle=False, level=HeatLevel.HOT) == PALETTE[HeatLevel.HOT]
+
+
 def test_lane_ui_labels_are_not_speakers() -> None:
     assert LANE_LABELS == ("low", "mid", "high")
 
@@ -66,6 +84,9 @@ def test_dot_window_paints_and_chrome_hits() -> None:
         win.set_state(HeatLevel.CALM, True, idle=True, wave=[0.001] * 8, lanes=(0.0, 0.0, 0.0))
         win.root.update_idletasks()
         assert win._canvas.itemcget(win._led, "fill") == PALETTE["off"]
+        assert win._canvas.itemcget(win._led_ring, "outline") == ICON_DIM
+        assert win._canvas.itemcget(win._pause_a, "state") == "hidden"
+        assert win._canvas.itemcget(win._mic_head, "state") == "normal"
         win.set_state(
             HeatLevel.HOT,
             True,
@@ -75,10 +96,14 @@ def test_dot_window_paints_and_chrome_hits() -> None:
         )
         win.root.update_idletasks()
         assert win._canvas.itemcget(win._led, "fill") == PALETTE[HeatLevel.HOT]
+        assert win._canvas.itemcget(win._mic_head, "state") == "normal"
+        assert win._canvas.itemcget(win._pause_a, "state") == "hidden"
         win.set_state(HeatLevel.HOT, False, idle=True, wave=[0.2] * 28, lanes=(0.1, 0.1, 0.1))
         win.root.update_idletasks()
         assert win._canvas.itemcget(win._led, "fill") == PALETTE["off"]
+        assert win._canvas.itemcget(win._led_ring, "outline") == CARD_EDGE
         assert win._canvas.itemcget(win._pause_a, "state") == "normal"
+        assert win._canvas.itemcget(win._mic_head, "state") == "hidden"
 
         assert win.hit_test(8, 8) == "card"
         assert win.hit_test(WIN_W // 2, 10) == "handle"
