@@ -6,6 +6,10 @@ While a meeting plays on this machine (Zoom, Teams, a browser tab), Mad Lite wat
 
 It is **not** an emotion detector, **not** face reading, **not** a transcript, and it does not call a cloud API.
 
+This tree is **v0 only** — the heat dial. Later local stacking cues, facilitator prompts, dual opt-in guides, and optional app hooks are sketched in **[ROADMAP.md](ROADMAP.md)**. They are not implemented here.
+
+License: [MIT](LICENSE). Written as a public-destined repo: use it, credit it, bake pieces in.
+
 UI ancestor: [The Point](https://github.com/parth4/point-overlay) is inspiration only. This repo does not copy that YouTube / manual engine.
 
 ## What it does
@@ -164,6 +168,15 @@ pyinstaller -F -n madlite -m madlite
 
 You still need system `libpulse` / PipeWire on the target machine. This is a note, not a release pipeline.
 
-## Out of scope
+## Roadmap
 
-Whisper / ASR, speaker ID, talk-over detection, Point faces, cloud APIs, auto-update, signed installers, writing meeting audio to disk.
+**This repo is v0** (the heat dial). The rest is intent only — [ROADMAP.md](ROADMAP.md):
+
+1. Stacking / interrupt **signals** from local audio (still no transcript)
+2. “Point landed?” / reframe cues and a tiny coach framework — not a note-taker
+3. Dual local guides, both sides opt in
+4. Skills / hooks so other apps **may** adopt; we do not claim Zoom or Teams will
+
+## Out of scope (v0)
+
+Whisper / ASR, speaker ID, talk-over detection, Point faces, cloud APIs, auto-update, signed installers, writing meeting audio to disk. Talk-over as a **local feature** is a v1 idea, not this release.
