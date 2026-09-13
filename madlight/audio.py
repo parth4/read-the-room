@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import shutil
 import subprocess
@@ -293,8 +294,16 @@ class DemoCapture:
         sr = self._config.sample_rate
         amp = _demo_amplitude(self._t)
         t = self._t + np.arange(n, dtype=np.float64) / sr
-        # Sine RMS = amp / sqrt(2) — predictable heat, no device.
-        block = (amp * np.sin(2.0 * np.pi * 220.0 * t)).astype(np.float32)
+        w_lo, w_mid, w_hi = _demo_band_weights(self._t)
+        # Three tones in the activity-lane bands. Peak-normalize to `amp`
+        # so heat still follows the same envelope (sine RMS ≈ amp / √2).
+        mix = (
+            w_lo * np.sin(2.0 * np.pi * 150.0 * t)
+            + w_mid * np.sin(2.0 * np.pi * 800.0 * t)
+            + w_hi * np.sin(2.0 * np.pi * 3200.0 * t)
+        )
+        peak = float(np.max(np.abs(mix))) if mix.size else 1.0
+        block = (amp * mix / max(peak, 1e-9)).astype(np.float32)
         self._t += n / sr
         return block
 
@@ -313,6 +322,14 @@ def _demo_amplitude(t: float) -> float:
     if x < 8.0:
         return 0.22
     return 0.22 * max(0.0, 1.0 - (x - 8.0) / 2.0)
+
+
+def _demo_band_weights(t: float) -> tuple[float, float, float]:
+    """Independent LFOs so the three activity lanes do not move as one blob."""
+    lo = 0.12 + 0.88 * (0.5 + 0.5 * math.sin(2.0 * math.pi * 0.28 * t))
+    mid = 0.12 + 0.88 * (0.5 + 0.5 * math.sin(2.0 * math.pi * 0.47 * t + 2.1))
+    hi = 0.12 + 0.88 * (0.5 + 0.5 * math.sin(2.0 * math.pi * 0.71 * t + 4.0))
+    return lo, mid, hi
 
 
 def open_capture(

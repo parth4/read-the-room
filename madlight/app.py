@@ -18,7 +18,18 @@ from madlight.audio import (
     list_monitor_sources,
     open_capture,
 )
-from madlight.heat import HeatClassifier, HeatConfig, HeatLevel, HeatSample
+from madlight.heat import (
+    HeatClassifier,
+    HeatConfig,
+    HeatLevel,
+    HeatSample,
+    activity_lanes,
+    block_rms,
+    is_idle,
+)
+
+# Keep in sync with madlight.ui.WAVE_BARS (history of capture-block RMS).
+_WAVE_BARS = 28
 
 
 @dataclass
@@ -27,13 +38,34 @@ class Runtime:
     stop: bool = False
     level: HeatLevel = HeatLevel.CALM
     sample: HeatSample | None = None
+    idle: bool = True
+    wave: list[float] = field(default_factory=lambda: [0.0] * _WAVE_BARS)
+    lanes: tuple[float, float, float] = (0.0, 0.0, 0.0)
     source_label: str = ""
     error: str | None = None
     lock: threading.Lock = field(default_factory=threading.Lock)
 
-    def snapshot(self) -> tuple[bool, HeatLevel, HeatSample | None, str | None]:
+    def snapshot(
+        self,
+    ) -> tuple[
+        bool,
+        HeatLevel,
+        HeatSample | None,
+        str | None,
+        bool,
+        tuple[float, ...],
+        tuple[float, float, float],
+    ]:
         with self.lock:
-            return self.listening, self.level, self.sample, self.error
+            return (
+                self.listening,
+                self.level,
+                self.sample,
+                self.error,
+                self.idle,
+                tuple(self.wave),
+                self.lanes,
+            )
 
     def set_listening(self, value: bool) -> None:
         with self.lock:
@@ -41,11 +73,15 @@ class Runtime:
             if not value:
                 self.level = HeatLevel.CALM
                 self.sample = None
+                self.idle = True
+                self.wave = [0.0] * len(self.wave)
+                self.lanes = (0.0, 0.0, 0.0)
 
     def request_stop(self) -> None:
         with self.lock:
             self.stop = True
             self.listening = False
+            self.idle = True
 
     def stopped(self) -> bool:
         with self.lock:
@@ -148,6 +184,12 @@ def _audio_loop(runtime: Runtime, config: HeatConfig, source: MonitorSource, bac
                     capture.close()
                     capture = None
                     classifier.reset()
+                with runtime.lock:
+                    runtime.idle = True
+                    runtime.wave = [0.0] * len(runtime.wave)
+                    runtime.lanes = (0.0, 0.0, 0.0)
+                    runtime.sample = None
+                    runtime.level = HeatLevel.CALM
                 time.sleep(0.05)
                 continue
             if capture is None:
@@ -173,29 +215,36 @@ def _audio_loop(runtime: Runtime, config: HeatConfig, source: MonitorSource, bac
                 time.sleep(0.2)
                 continue
             sample = classifier.push_block(block)
+            instant = block_rms(block)
+            lanes = activity_lanes(block, config.sample_rate)
             leftover = config.block_ms / 1000.0 - (time.monotonic() - t0)
             if leftover > 0:
                 time.sleep(leftover)
             with runtime.lock:
                 runtime.level = sample.level
                 runtime.sample = sample
+                runtime.idle = is_idle(sample.rms, config.silence_rms)
+                runtime.wave.pop(0)
+                runtime.wave.append(instant)
+                runtime.lanes = (lanes + (0.0, 0.0, 0.0))[:3]
     finally:
         if capture is not None:
             capture.close()
 
 
 def _format_line(runtime: Runtime) -> str:
-    listening, level, sample, error = runtime.snapshot()
+    listening, level, sample, error, idle, _wave, _lanes = runtime.snapshot()
     if error and not listening:
-        return f"off     error={error.splitlines()[0]}"
+        return f"paused  error={error.splitlines()[0]}"
     if not listening:
-        return "off     not listening (Off switch)"
+        return "paused  not listening (pause / Off switch)"
     if error:
         return f"wait    {error.splitlines()[0]}"
     if sample is None:
         return "wait    opening monitor…"
+    tag = "idle" if idle else f"{level:6}"
     return (
-        f"{level:6}  rms={sample.rms:.3f}  slope={sample.slope:+.3f}  "
+        f"{tag:6}  rms={sample.rms:.3f}  slope={sample.slope:+.3f}  "
         f"{sample.db_fs:6.1f} dBFS"
     )
 
@@ -203,7 +252,7 @@ def _format_line(runtime: Runtime) -> str:
 def _text_loop(runtime: Runtime) -> None:
     print(
         f"Mad Light {__version__}  source={runtime.source_label or '(starting)'}  "
-        "q+enter or Ctrl+C to quit; 'off' toggles the kill switch",
+        "q+enter or Ctrl+C to quit; 'off'/'pause' toggles the kill switch",
         flush=True,
     )
 
@@ -213,9 +262,8 @@ def _text_loop(runtime: Runtime) -> None:
             if token in {"q", "quit", "exit"}:
                 runtime.request_stop()
                 break
-            if token in {"off", "on", "toggle"}:
-                with runtime.lock:
-                    runtime.listening = not runtime.listening
+            if token in {"off", "on", "toggle", "pause", "resume"}:
+                runtime.set_listening(not runtime.listening)
 
     threading.Thread(target=stdin_watch, name="madlight-stdin", daemon=True).start()
     last = ""
@@ -232,8 +280,7 @@ def _run_gui(runtime: Runtime, *, dot: bool, tray: bool) -> bool:
     tray_ctl = None
 
     def toggle_off() -> None:
-        with runtime.lock:
-            runtime.listening = not runtime.listening
+        runtime.set_listening(not runtime.listening)
 
     def quit_app() -> None:
         runtime.request_stop()
@@ -277,6 +324,7 @@ def _run_gui(runtime: Runtime, *, dot: bool, tray: bool) -> bool:
                 on_show_dot=None if dot_win is None else show_dot,
                 get_listening=lambda: runtime.snapshot()[0],
                 get_level=lambda: runtime.snapshot()[1],
+                get_idle=lambda: runtime.snapshot()[4],
             )
             try:
                 tray_ctl.start()
@@ -291,10 +339,10 @@ def _run_gui(runtime: Runtime, *, dot: bool, tray: bool) -> bool:
         if runtime.stopped():
             quit_app()
             return
-        listening, level, _sample, _err = runtime.snapshot()
+        listening, level, _sample, _err, idle, wave, lanes = runtime.snapshot()
         if dot_win is not None:
-            dot_win.set_state(level, listening)
-            dot_win.after(120, tick)
+            dot_win.set_state(level, listening, idle=idle, wave=wave, lanes=lanes)
+            dot_win.after(50, tick)
         if tray_ctl is not None:
             tray_ctl.update()
 

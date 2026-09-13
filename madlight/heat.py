@@ -16,6 +16,10 @@ from enum import StrEnum
 
 import numpy as np
 
+# Frequency-band activity (loopback mix). Not speaker IDs.
+LANE_EDGES_HZ: tuple[float, float, float, float] = (80.0, 400.0, 2000.0, 8000.0)
+LANE_LABELS: tuple[str, str, str] = ("low", "mid", "high")
+
 
 class HeatLevel(StrEnum):
     CALM = "calm"
@@ -65,19 +69,64 @@ class HeatSample:
     cv: float = 0.0
 
 
-def block_rms(samples: np.ndarray) -> float:
-    """RMS of one block. Stereo is downmixed to mono first."""
+def _mono(samples: np.ndarray) -> np.ndarray:
     x = np.asarray(samples, dtype=np.float64)
     if x.size == 0:
-        return 0.0
+        return np.asarray([], dtype=np.float64)
     if x.ndim > 1:
         x = x.mean(axis=-1)
-    x = np.ravel(x)
+    return np.ravel(x)
+
+
+def block_rms(samples: np.ndarray) -> float:
+    """RMS of one block. Stereo is downmixed to mono first."""
+    x = _mono(samples)
+    if x.size == 0:
+        return 0.0
     return float(np.sqrt(np.mean(np.square(x))))
 
 
 def db_fs(rms: float) -> float:
     return 20.0 * float(np.log10(max(rms, 1e-12)))
+
+
+def is_idle(rms: float, floor: float | None = None) -> bool:
+    """Sustained near-silence: smoothed RMS below the heat silence floor.
+
+    Used by the LED to paint dark grey instead of calm-green. Does not
+    change classify_heat() — silence is still CALM in the classifier.
+    """
+    cut = HeatConfig().silence_rms if floor is None else float(floor)
+    return float(rms) < cut
+
+
+def activity_lanes(
+    samples: np.ndarray,
+    sample_rate: int = 16_000,
+    edges: tuple[float, ...] = LANE_EDGES_HZ,
+) -> tuple[float, ...]:
+    """Per-band RMS of the mix via a tiny rFFT split (low / mid / high).
+
+    Honest local stand-in for concurrent activity — **not** diarization
+    and not “Person 1/2/3”. Stereo is downmixed first (same as heat).
+    """
+    x = _mono(samples)
+    n_bands = max(0, len(edges) - 1)
+    empty = tuple(0.0 for _ in range(n_bands))
+    if x.size < 16 or n_bands < 1 or sample_rate <= 0:
+        return empty
+    n = int(x.size)
+    spec = np.fft.rfft(x * np.hanning(n))
+    freqs = np.fft.rfftfreq(n, d=1.0 / float(sample_rate))
+    bands: list[float] = []
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        mask = (freqs >= float(lo)) & (freqs < float(hi))
+        part = np.zeros_like(spec)
+        if np.any(mask):
+            part[mask] = spec[mask]
+        y = np.fft.irfft(part, n=n)
+        bands.append(float(np.sqrt(np.mean(np.square(y)))))
+    return tuple(bands)
 
 
 def classify_heat(
