@@ -13,7 +13,7 @@ from madlight.audio import (
     parse_pactl_short_sources,
     parse_pactl_sink_monitor,
 )
-from madlight.heat import HeatClassifier, HeatConfig, HeatLevel
+from madlight.heat import HeatClassifier, HeatConfig, HeatLevel, activity_lanes, is_idle
 
 
 SHORT_SOURCES = """\
@@ -98,3 +98,23 @@ def test_demo_capture_cycles_quiet_to_hot() -> None:
     quiet = DemoCapture(cfg)
     first = float(np.max(np.abs(quiet.read())))
     assert first < 0.02
+
+
+def test_demo_quiet_is_idle_and_lanes_diverge() -> None:
+    cfg = HeatConfig(block_ms=50, sample_rate=16_000)
+    cap = DemoCapture(cfg)
+    quiet = HeatClassifier(cfg).push_block(cap.read())
+    assert is_idle(quiet.rms, cfg.silence_rms)
+
+    # Skip the silent head (~2s), then look for mixed-band energy.
+    for _ in range(50):
+        cap.read()
+    peaked = [activity_lanes(cap.read(), cfg.sample_rate) for _ in range(40)]
+    cap.close()
+    lows = [p[0] for p in peaked]
+    mids = [p[1] for p in peaked]
+    highs = [p[2] for p in peaked]
+    # Independent LFOs: at least two bands take the lead at different times.
+    leaders = {int(np.argmax(p)) for p in peaked if max(p) > 1e-4}
+    assert len(leaders) >= 2
+    assert max(lows) > 0 and max(mids) > 0 and max(highs) > 0

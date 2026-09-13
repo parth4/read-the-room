@@ -2,9 +2,9 @@
 
 **MAD = Meeting Atmosphere Dial.** **Light** = a signal / bulb — not “lite” as in a cut-down edition.
 
-While a meeting plays on this machine (Zoom, Teams, a browser tab), Mad Light watches the **monitor source of the default audio sink** — the same stream you already hear on headphones or speakers — and shows a **recording-indicator LED**: a tiny always-on-top colored **dot** (green / amber / red) from crude energy features (rolling RMS and its short-term slope).
+While a meeting plays on this machine (Zoom, Teams, a browser tab), Mad Light watches the **monitor source of the default audio sink** — the same stream you already hear on headphones or speakers — and shows a compact always-on-top **card**: a center heat circle (green / amber / red / idle grey) from crude energy features (rolling RMS and its short-term slope), a scrolling level, and three **activity lanes** (frequency bands of the mix).
 
-It is **not** a dashboard, **not** a labeled pill, **not** an emotion detector, **not** face reading, **not** a transcript, and it does not call a cloud API.
+It is **not** a dashboard, **not** a labeled pill, **not** an emotion detector, **not** face reading, **not** speaker diarization, **not** a transcript, and it does not call a cloud API.
 
 This tree is **v0 only** — the atmosphere dial. The **clarity / facilitator** work (“point landed?”, reframe, a tiny commandments-style framework) is **v2+** in **[ROADMAP.md](ROADMAP.md)**. It is not implemented here. Rebuild v0 from **[SPEC.md](SPEC.md)**.
 
@@ -24,19 +24,19 @@ These are the north-star uses. They are why the light exists. **v0 still only sh
 
 ## How you get it
 
-1. **Runnable local app** — this repo, **Omarchy / Linux first**. Install, run `madlight`, watch the default-sink monitor. One green / amber / red **dot**.
+1. **Runnable local app** — this repo, **Omarchy / Linux first**. Install, run `madlight`, watch the default-sink monitor. Compact floating card: heat circle + level + activity lanes.
 2. **Spec for another agent** — give a coding agent **[SPEC.md](SPEC.md)** (“build Mad Light to this spec”). Optionally add [`.cursor/skills/mad-light/SKILL.md`](.cursor/skills/mad-light/SKILL.md). The expected result is a faithful **local dial + recording-indicator dot**, not the roadmap’s coach features.
 
 ## What it does
 
 | LED | Meaning (energy only) |
 | --- | --- |
-| **green** | calm — quiet / steady low energy |
+| **green** | calm — listening, steady low-but-present energy |
 | **amber** | rising — mid energy, or energy climbing quickly |
 | **red** | hot — high RMS |
-| **grey** | off — not listening |
+| **dark grey** | paused, or sustained near-silence (not listening / idle) |
 
-The overlay is a **single circle**, about the size of a Zoom recording pip or a hardware LED. No status text on the dot. The tray icon mirrors the same colors. **Off — stop listening** lives on the tray (right-click the dot if you have no tray). Off **stops capture immediately**.
+The overlay is a **compact floating card** (Voice Access–style chrome, not a dashboard): drag handle and close, a **center circle** for listening/heat, gear / help, a thin level under the circle, and **three activity lanes** (low / mid / high bands of the loopback mix). No speaker names. The tray icon mirrors the circle color. **Pause** is a click on the center circle (or Space / Escape / tray). Pause **stops capture immediately** (same kill switch as `--text` `off` / `pause`). Drag the handle or card to move; close quits.
 
 ## Privacy
 
@@ -103,12 +103,16 @@ Useful flags:
 | `--list-sources` | Print sink **monitors** (not mics) and mark the default |
 | `--source NAME` | Use an explicit `.monitor` source |
 | `--demo` | Synthetic energy loop; no audio device |
-| `--text` | Print `calm` / `rising` / `hot` on stdout (good over SSH) |
+| `--text` | Print `idle` / `calm` / `rising` / `hot` / `paused` on stdout (good over SSH) |
 | `--no-dot` / `--no-tray` | One surface only |
 | `--backend auto\|soundcard\|parec\|pw-record` | Capture backend |
 | `--rising-rms` `--hot-rms` `--rising-slope` | Thresholds (LED colors stay green / amber / red) |
 
-Kill switch: tray **Off — stop listening**, right-click the LED, or in `--text` mode type `off` / `q` + Enter (or Ctrl+C).
+Pause / kill switch: click the **center circle** (or Space / Escape), tray **Pause — stop listening**, gear / right-click menu, or in `--text` mode type `off` / `pause` / `q` + Enter (or Ctrl+C). Drag the handle (or the card) to move. Help explains colors and that lanes are bands, not speakers.
+
+### Activity lanes ≠ speakers
+
+The three lines are **frequency bands** (low / mid / high) of the same loopback mix — a local, honest stand-in for concurrent activity. They are **not** speaker diarization, **not** “Person 1/2/3”, and they do not identify who is talking. Real multi-speaker ID is out of scope.
 
 ## Headphone sink monitor
 
@@ -125,7 +129,7 @@ Mad Light records **what you hear**, not what you say.
    # expect: <that-sink>.monitor   (marked *)
    ```
 
-3. Play something loud, then pause it. The LED should go red/amber, then green.
+3. Play something loud, then pause it. The LED should go red/amber, then dark grey (idle) once energy stays below the silence floor.
 
 If the LED stays green while you hear the meeting, you are on the wrong source (or a muted monitor). Pass `--source` from `--list-sources`. Do **not** pick `alsa_input.*` (that is the mic).
 
@@ -141,7 +145,7 @@ windowrulev2 = pin, title:^(Mad Light)$
 windowrulev2 = noborder, title:^(Mad Light)$
 ```
 
-The tray icon is the Wayland-friendly Off switch and color mirror.
+The tray icon is the Wayland-friendly pause switch and color mirror.
 
 ## How to test (no meeting required)
 
@@ -151,9 +155,16 @@ pytest
 
 # 2. Synthetic LED / text (still no device):
 madlight --demo --text
-# expect a ~10s loop: calm → rising → hot → fade
+# expect a ~10s loop: idle (near-silence) → rising → hot → fade
+# type pause + Enter to freeze capture (dark grey / "paused")
 
-# 3. Real playback through headphones:
+# 3. Synthetic GUI (no meeting):
+madlight --demo --no-tray
+# floating card: grey center when silent or paused; green/amber/red when energy;
+# waveform under the circle; three activity lanes move independently
+# click the center to pause / resume; × closes
+
+# 4. Real playback through headphones:
 #    play a video locally, default sink = headphones, then:
 madlight --list-sources
 madlight
@@ -177,14 +188,21 @@ Files default to **peak-normalize** (YouTube LUFS ≠ live volume). `--no-normal
 Defaults are conservative for speech-ish meeting playback:
 
 - `rising_rms = 0.045`, `hot_rms = 0.11` (linear amplitude, 0..1)
-- `rising_slope = 0.035` (RMS per second)
+- `rising_slope = 0.07` (RMS per second)
 - 50 ms blocks, 2 s RMS window, 0.6 s slope window, hysteresis via `drop_margin`
+- idle grey uses the same `silence_rms = 0.008` floor as the classifier (smoothed RMS)
 
-`--text` prints `rms`, `slope`, and dBFS so you can nudge `--hot-rms` / `--rising-rms` if your headset mix is very quiet or very hot. The LED stays three colors plus grey-off.
+`--text` prints `rms`, `slope`, and dBFS so you can nudge `--hot-rms` / `--rising-rms` if your headset mix is very quiet or very hot. The LED stays three heat colors plus dark grey (paused / idle).
 
-## Windows (later)
+## Windows
 
-v0 is Linux. A later port can use WASAPI loopback (`soundcard` already speaks WASAPI). That is explicitly out of scope here and must not block this tree.
+WASAPI loopback via `soundcard` (same `--backend` as Linux):
+
+```bash
+madlight --backend soundcard
+```
+
+Use `--demo` first if you want to see grey (silence / pause), heat colors, the scrolling level, and the three activity lanes without a meeting. Tray may be missing on some desktops; click or Space still pauses.
 
 ## PyInstaller (optional)
 
@@ -208,4 +226,4 @@ You still need system `libpulse` / PipeWire on the target machine. This is a not
 
 ## Out of scope (v0)
 
-Whisper / ASR, speaker ID, talk-over detection, Point faces, cloud APIs, auto-update, signed installers, writing meeting audio to disk. Talk-over as a **local feature** is a v1 idea, not this release.
+Whisper / ASR, speaker ID / diarization (activity lanes are frequency bands, not people), talk-over detection, Point faces, cloud APIs, auto-update, signed installers, writing meeting audio to disk. Talk-over as a **local feature** is a v1 idea, not this release.
