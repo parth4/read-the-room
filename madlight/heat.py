@@ -1,6 +1,11 @@
-"""Rolling RMS + short-term slope → calm / rising / hot.
+"""Rolling RMS + slope + density → calm / rising / hot.
 
 Energy only. Not emotion, not speech content, not faces.
+
+Density (fill + crest): calm turn-taking speech is peaky with gaps
+(high crest). Talk-over / heated stretch is fuller (high fill, lower
+crest, some modulation). Steady music is full but flat (no modulation)
+so it stays out of the density path.
 """
 
 from __future__ import annotations
@@ -10,6 +15,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 import numpy as np
+
 
 class HeatLevel(StrEnum):
     CALM = "calm"
@@ -27,9 +33,13 @@ class HeatConfig:
     slope_seconds: float = 0.6
     rising_rms: float = 0.045
     hot_rms: float = 0.11
-    rising_slope: float = 0.035
+    rising_slope: float = 0.07
     drop_margin: float = 0.015
     silence_rms: float = 0.008
+    # Density path (talk-over / heated room vs peaky monologue).
+    density_fill: float = 0.85
+    density_crest_max: float = 2.0
+    density_cv_min: float = 0.25
 
     @property
     def block_frames(self) -> int:
@@ -50,6 +60,9 @@ class HeatSample:
     rms: float
     slope: float
     db_fs: float
+    fill: float = 0.0
+    crest: float = 0.0
+    cv: float = 0.0
 
 
 def block_rms(samples: np.ndarray) -> float:
@@ -72,8 +85,12 @@ def classify_heat(
     slope: float,
     current: HeatLevel,
     cfg: HeatConfig,
+    *,
+    fill: float = 0.0,
+    crest: float = 0.0,
+    cv: float = 0.0,
 ) -> HeatLevel:
-    """Map smoothed RMS + slope to a heat level, with hysteresis."""
+    """Map smoothed RMS + slope + density to heat, with hysteresis."""
     hot_enter, hot_hold = cfg.hot_rms, cfg.hot_rms - cfg.drop_margin
     rise_enter, rise_hold = cfg.rising_rms, cfg.rising_rms - cfg.drop_margin
     slope_enter = cfg.rising_slope
@@ -86,15 +103,26 @@ def classify_heat(
     in_heat = current is not HeatLevel.CALM
     rms_cut = rise_hold if in_heat else rise_enter
     slope_cut = slope_hold if current is HeatLevel.RISING else slope_enter
-    loud_enough = rms >= rms_cut
     climbing = slope >= slope_cut and rms >= cfg.silence_rms
-    if loud_enough or climbing:
+    # Density: continuous/modulated energy (crosstalk), not peaky monologue,
+    # not flat music (cv ~ 0).
+    dense = (
+        fill >= cfg.density_fill
+        and 0.0 < crest <= cfg.density_crest_max
+        and cv >= cfg.density_cv_min
+        and rms >= cfg.silence_rms
+    )
+    # Absolute loud alone is NOT rising (that false-fired calm TED).
+    # Climb or dense talk-over is.
+    if climbing or dense:
+        return HeatLevel.RISING
+    if in_heat and rms >= rms_cut:
         return HeatLevel.RISING
     return HeatLevel.CALM
 
 
 class HeatClassifier:
-    """Rolling RMS buffer → smoothed energy, slope, and heat level."""
+    """Rolling RMS buffer → smoothed energy, slope, density, heat level."""
 
     def __init__(self, config: HeatConfig | None = None) -> None:
         self.config = config or HeatConfig()
@@ -116,12 +144,24 @@ class HeatClassifier:
         self._rms.append(float(max(0.0, rms)))
         smoothed = self.smoothed_rms()
         slope = self.slope_per_second()
-        self._level = classify_heat(smoothed, slope, self._level, self.config)
+        fill, crest, cv = self.density()
+        self._level = classify_heat(
+            smoothed,
+            slope,
+            self._level,
+            self.config,
+            fill=fill,
+            crest=crest,
+            cv=cv,
+        )
         return HeatSample(
             level=self._level,
             rms=smoothed,
             slope=slope,
             db_fs=db_fs(smoothed),
+            fill=fill,
+            crest=crest,
+            cv=cv,
         )
 
     def smoothed_rms(self) -> float:
@@ -130,6 +170,20 @@ class HeatClassifier:
         recent = min(len(self._rms), self.config.slope_blocks)
         chunk = list(self._rms)[-recent:]
         return float(sum(chunk) / len(chunk))
+
+    def density(self) -> tuple[float, float, float]:
+        """Return (fill, crest, cv) over the rolling window."""
+        if len(self._rms) < 4:
+            return 0.0, 0.0, 0.0
+        vals = list(self._rms)
+        arr = np.asarray(vals, dtype=np.float64)
+        fill = float(np.mean(arr >= self.config.silence_rms))
+        p50 = float(np.median(arr))
+        p95 = float(np.percentile(arr, 95))
+        crest = p95 / max(p50, 1e-6)
+        mean = float(np.mean(arr))
+        cv = float(np.std(arr) / max(mean, 1e-6))
+        return fill, float(crest), cv
 
     def slope_per_second(self) -> float:
         if len(self._rms) < 4:
