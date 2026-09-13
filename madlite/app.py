@@ -116,8 +116,8 @@ def _print_sources() -> int:
     try:
         current = discover_monitor()
         print(f"default monitor: {current.pulse_name}  ({current.label}, via {current.via})")
-    except CaptureError as exc:
-        print(f"default monitor: unavailable\n{exc}", file=sys.stderr)
+    except Exception as exc:
+        print(f"default monitor: unavailable ({exc})", file=sys.stderr)
         current = None
     sources = list_monitor_sources()
     if not sources:
@@ -158,6 +158,7 @@ def _audio_loop(runtime: Runtime, config: HeatConfig, source: MonitorSource, bac
                         runtime.error = str(exc)
                     time.sleep(0.5)
                     continue
+            t0 = time.monotonic()
             try:
                 block = capture.read()
             except CaptureError as exc:
@@ -169,6 +170,9 @@ def _audio_loop(runtime: Runtime, config: HeatConfig, source: MonitorSource, bac
                 time.sleep(0.2)
                 continue
             sample = classifier.push_block(block)
+            leftover = config.block_ms / 1000.0 - (time.monotonic() - t0)
+            if leftover > 0:
+                time.sleep(leftover)
             with runtime.lock:
                 runtime.level = sample.level
                 runtime.sample = sample

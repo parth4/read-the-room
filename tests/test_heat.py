@@ -100,17 +100,26 @@ def test_classifier_step_up_becomes_hot() -> None:
 
 def test_classifier_ramp_reports_rising_before_hot() -> None:
     clf = HeatClassifier(CFG)
-    # 0.6s slope window = 12 blocks. Climb from near-silence to mid energy.
+    _feed(clf, [0.01] * 8)
     start, end, n = 0.01, 0.07, 16
     ramp = [start + (end - start) * i / (n - 1) for i in range(n)]
     sample = None
+    saw_rising = False
     for rms in ramp:
         sample = clf.push_rms(rms)
         if sample.level is HeatLevel.RISING:
+            saw_rising = True
             break
     assert sample is not None
-    assert sample.level is HeatLevel.RISING
+    assert saw_rising
     assert sample.slope > 0
+
+
+def test_slope_positive_on_linear_ramp() -> None:
+    clf = HeatClassifier(CFG)
+    for i in range(24):
+        clf.push_rms(0.01 + 0.004 * i)
+    assert clf.slope_per_second() > 0.02
 
 
 def test_classifier_push_block_matches_push_rms() -> None:

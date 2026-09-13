@@ -96,5 +96,5 @@ def test_demo_capture_cycles_quiet_to_hot() -> None:
     assert HeatLevel.HOT in levels
     # last fade block should be heading down; a quiet stretch exists
     quiet = DemoCapture(cfg)
-    first = np.max(np.abs(quiet.read()))
+    first = float(np.max(np.abs(quiet.read())))
     assert first < 0.02

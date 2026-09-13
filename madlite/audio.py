@@ -100,12 +100,12 @@ def _pactl_default_monitor() -> MonitorSource:
 def _soundcard_default_monitor() -> MonitorSource:
     try:
         import soundcard as sc
-    except ImportError as exc:
-        raise CaptureError("soundcard is not installed") from exc
-    try:
+
         speaker = sc.default_speaker()
-    except Exception as exc:  # soundcard raises IndexError / pulse errors
-        raise CaptureError(f"soundcard has no default speaker: {exc}") from exc
+    except Exception as exc:  # import can assert if Pulse/PipeWire is down
+        raise CaptureError(
+            f"soundcard loopback unavailable: {type(exc).__name__}: {exc}"
+        ) from exc
     pulse_id = getattr(speaker, "id", None) or speaker.name
     candidate_ids = [f"{pulse_id}.monitor", pulse_id, speaker.name]
     last_err: Exception | None = None
@@ -160,7 +160,7 @@ def discover_monitor(
     for finder in (_pactl_default_monitor, _soundcard_default_monitor):
         try:
             return _refuse_mic(finder(), allow_non_monitor=allow_non_monitor)
-        except CaptureError as exc:
+        except Exception as exc:
             errors.append(str(exc))
     hint = (
         "Could not find a monitor source for the default sink.\n"
@@ -287,32 +287,32 @@ class DemoCapture:
         )
         self._config = config
         self._t = 0.0
-        self._rng = np.random.default_rng(0)
 
     def read(self) -> np.ndarray:
-        dt = self._config.block_ms / 1000.0
-        amp = _demo_amplitude(self._t)
-        self._t += dt
         n = self._config.block_frames
-        noise = self._rng.normal(0.0, 1.0, n).astype(np.float32)
-        peak = float(np.max(np.abs(noise))) or 1.0
-        return (noise / peak) * amp
+        sr = self._config.sample_rate
+        amp = _demo_amplitude(self._t)
+        t = self._t + np.arange(n, dtype=np.float64) / sr
+        # Sine RMS = amp / sqrt(2) — predictable heat, no device.
+        block = (amp * np.sin(2.0 * np.pi * 220.0 * t)).astype(np.float32)
+        self._t += n / sr
+        return block
 
     def close(self) -> None:
         return
 
 
 def _demo_amplitude(t: float) -> float:
-    """~10s loop: quiet → climb → hot → fade."""
+    """~10s loop: quiet → climb → hot → fade. Peak amplitude of a sine."""
     cycle = 10.0
     x = t % cycle
     if x < 3.0:
-        return 0.004
+        return 0.006
     if x < 5.0:
-        return 0.004 + (x - 3.0) / 2.0 * 0.10
+        return 0.006 + (x - 3.0) / 2.0 * 0.10
     if x < 8.0:
-        return 0.16
-    return 0.16 * max(0.0, 1.0 - (x - 8.0) / 2.0)
+        return 0.22
+    return 0.22 * max(0.0, 1.0 - (x - 8.0) / 2.0)
 
 
 def open_capture(

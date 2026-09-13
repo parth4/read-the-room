@@ -132,11 +132,10 @@ class HeatClassifier:
         return float(sum(chunk) / len(chunk))
 
     def slope_per_second(self) -> float:
-        need = self.config.slope_blocks * 2
-        if len(self._rms) < need:
+        if len(self._rms) < 4:
             return 0.0
+        n = min(self.config.slope_blocks, len(self._rms) // 2)
         values = list(self._rms)
-        n = self.config.slope_blocks
         older = values[-2 * n : -n]
         newer = values[-n:]
         dt = n * self.config.block_ms / 1000.0
