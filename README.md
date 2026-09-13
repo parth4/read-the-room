@@ -161,6 +161,17 @@ madlight
 
 Success looks like: fresh clone → install → run → monitor of the default sink → the **dot** reacts to loud vs quiet playback. No network in the audio path.
 
+## Calibrate (offline critic)
+
+Label short clips and score the same thresholds the LED uses. Not neural training, not the cloud.
+
+```bash
+madlight calibrate --manifest tests/fixtures/manifest.json
+madlight calibrate --manifest samples/manifest.jsonl --propose
+```
+
+See [CALIBRATE.md](CALIBRATE.md) and [samples/README.md](samples/README.md).
+
 ## Tuning
 
 Defaults are conservative for speech-ish meeting playback:

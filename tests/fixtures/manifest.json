@@ -1,0 +1,38 @@
+[
+  {
+    "path": "synth_silence.wav",
+    "expected_level": "calm",
+    "category": "silence_or_music",
+    "synth": "silence"
+  },
+  {
+    "path": "synth_calm.wav",
+    "expected_level": "calm",
+    "category": "calm",
+    "synth": "calm"
+  },
+  {
+    "path": "synth_rising.wav",
+    "expected_level": "rising",
+    "category": "rising",
+    "synth": "rising"
+  },
+  {
+    "path": "synth_hot.wav",
+    "expected_level": "hot",
+    "category": "hot",
+    "synth": "hot"
+  },
+  {
+    "path": "synth_music_steady.wav",
+    "expected_level": "calm",
+    "category": "silence_or_music",
+    "synth": "music_steady"
+  },
+  {
+    "path": "synth_laughter_burst.wav",
+    "expected_level": "calm",
+    "category": "laughter_applause",
+    "synth": "laughter_burst"
+  }
+]
