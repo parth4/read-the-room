@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import math
 import threading
 import time
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
+from madlight.draw import aa_disc, aa_gear, aa_help
 from madlight.faces import (
     FACE_CALM,
     FACE_HOT,
@@ -46,6 +46,10 @@ LABEL = {
 
 # Compact Voice Access–style card. Center circle is the listening/heat control.
 DOT_PX = 44
+# Disc bitmap includes the 2px ring; Pillow AA, not a Tk oval.
+CIRCLE_IMG_PX = DOT_PX + 4
+GEAR_PX = 22
+HELP_PX = 18
 CHROME_H = 20
 PAD_X = 16
 WIN_W = 232
@@ -75,9 +79,9 @@ WAVE_DIM = "#3F3F3F"
 HELP_TEXT = (
     "Mad Light — meeting heat from the local loopback mix.\n\n"
     "Center face: click to pause / resume listening.\n"
-    "  🙂 calm (or silence — still listening)\n"
-    "  😐 rising — energy climbing\n"
-    "  😠 hot\n"
+    "  😊 calm (or silence — still listening)\n"
+    "  😬 rising — energy climbing\n"
+    "  😡 hot\n"
     "  🤐 paused — not listening\n\n"
     "Circle color follows heat while listening.\n"
     "Paused = dark gray + muted face.\n"
@@ -140,9 +144,10 @@ def center_xy() -> tuple[int, int]:
 def make_icon(level: HeatLevel | None, size: int = 64) -> Image.Image:
     color = PALETTE["off"] if level is None else PALETTE[level]
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    inset = 6
-    draw.ellipse((inset, inset, size - inset - 1, size - inset - 1), fill=color, outline=CARD)
+    disc = aa_disc(max(8, size - 12), color, outline=CARD, outline_width=2)
+    x = (size - disc.width) // 2
+    y = (size - disc.height) // 2
+    img.alpha_composite(disc, (x, y))
     return img
 
 
@@ -251,28 +256,17 @@ class DotWindow:
         cx, cy = center_xy()
         self._side_gear = 28
         self._side_help = WIN_W - 28
-        self._draw_gear(self._side_gear, cy)
-        self._help_ring = self._canvas.create_oval(
-            self._side_help - 8, cy - 8, self._side_help + 8, cy + 8,
-            outline=ICON, width=1, tags=("help",),
-        )
-        self._help_mark = self._canvas.create_text(
-            self._side_help, cy, text="?", fill=ICON, font=("Sans", 10, "bold"), tags=("help",)
-        )
+        self._draw_chrome_icons(cx, cy)
 
-        r = DOT_PX / 2
-        self._led_ring = self._canvas.create_oval(
-            cx - r - 2, cy - r - 2, cx + r + 2, cy + r + 2,
-            outline=ICON_DIM, width=2, tags=("center",),
-        )
-        self._led = self._canvas.create_oval(
-            cx - r, cy - r, cx + r, cy + r, fill=PALETTE["off"], outline="", tags=("center",)
-        )
+        self._led_photos: dict[tuple[str, str], Any] = {}
+        self._led_fill = PALETTE["off"]
+        self._led_ring_color = ICON_DIM
+        self._led = self._canvas.create_image(cx, cy, tags=("center", "led"))
         self._face_photos: dict[str, Any] = {}
         self._face_glyph = FACE_CALM
         self._fallback_items: list[int] = []
         self._face = self._canvas.create_image(cx, cy, tags=("center", "face"))
-        self._paint_face(FACE_CALM, MARK_ON_GRAY)
+        self._apply_circle()
 
         wave_x = PAD_X
         wave_span = WIN_W - PAD_X * 2
@@ -391,7 +385,8 @@ class DotWindow:
         elif glyph == FACE_RISING:
             self._fallback_items.append(
                 self._canvas.create_line(
-                    cx - 6, cy + 7, cx + 6, cy + 7, fill=color, width=2, tags=("center",)
+                    cx - 7, cy + 6, cx - 3, cy + 9, cx + 3, cy + 5, cx + 7, cy + 8,
+                    fill=color, width=2, smooth=True, tags=("center",),
                 )
             )
         else:
@@ -414,16 +409,28 @@ class DotWindow:
         self._canvas.itemconfig(self._face, state="hidden")
         self._draw_fallback_face(glyph, ink)
 
-    def _draw_gear(self, cx: int, cy: int) -> None:
-        teeth: list[float] = []
-        for i in range(16):
-            ang = math.radians(i * 22.5 - 11.25)
-            r = 7.2 if i % 2 == 0 else 4.6
-            teeth.extend((cx + r * math.cos(ang), cy + r * math.sin(ang)))
-        self._canvas.create_polygon(*teeth, outline=ICON, fill="", width=1, tags=("gear",))
-        self._canvas.create_oval(
-            cx - 2.2, cy - 2.2, cx + 2.2, cy + 2.2, outline=ICON, width=1, tags=("gear",)
-        )
+    def _draw_chrome_icons(self, cx: int, cy: int) -> None:
+        from PIL import ImageTk
+
+        self._gear_photo = ImageTk.PhotoImage(aa_gear(GEAR_PX, ICON), master=self.root)
+        self._help_photo = ImageTk.PhotoImage(aa_help(HELP_PX, ICON), master=self.root)
+        self._canvas.create_image(self._side_gear, cy, image=self._gear_photo, tags=("gear",))
+        self._canvas.create_image(self._side_help, cy, image=self._help_photo, tags=("help",))
+
+    def _load_disc_photo(self, fill: str, ring: str) -> Any | None:
+        key = (fill, ring)
+        cached = self._led_photos.get(key)
+        if cached is not None:
+            return cached
+        img = aa_disc(CIRCLE_IMG_PX, fill, outline=ring, outline_width=2)
+        try:
+            from PIL import ImageTk
+
+            photo = ImageTk.PhotoImage(img, master=self.root)
+        except Exception:
+            return None
+        self._led_photos[key] = photo
+        return photo
 
     def _hit_boxes(self) -> dict[str, tuple[int, int, int, int]]:
         return {
@@ -470,14 +477,16 @@ class DotWindow:
 
     def _apply_circle(self) -> None:
         color = led_fill(listening=self._listening, idle=self._idle, level=self._level)
+        ring = center_ring(listening=self._listening, idle=self._idle, level=self._level)
         ink = center_mark_fill(listening=self._listening, idle=self._idle)
         glyph = face_for(listening=self._listening, idle=self._idle, level=self._level)
-        self._canvas.itemconfig(self._led, fill=color)
-        self._canvas.itemconfig(
-            self._led_ring,
-            outline=center_ring(listening=self._listening, idle=self._idle, level=self._level),
-        )
+        self._led_fill = color
+        self._led_ring_color = ring
+        photo = self._load_disc_photo(color, ring)
+        if photo is not None:
+            self._canvas.itemconfig(self._led, image=photo, state="normal")
         self._paint_face(glyph, ink)
+        self._canvas.tag_raise("face")
 
     def _hover(self, event: Any) -> None:
         hit = self.hit_test(event.x, event.y)

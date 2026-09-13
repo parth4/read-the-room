@@ -8,9 +8,9 @@ from PIL import Image
 
 from madlight.heat import HeatLevel
 
-FACE_CALM = "🙂"
-FACE_RISING = "😐"
-FACE_HOT = "😠"
+FACE_CALM = "😊"
+FACE_RISING = "😬"
+FACE_HOT = "😡"
 FACE_PAUSED = "🤐"
 
 # Fits inside the 44px circle with a ring of fill color still visible.
