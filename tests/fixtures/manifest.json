@@ -46,5 +46,11 @@
     "expected_level": "calm",
     "category": "calm",
     "synth": "loud_master_calm"
+  },
+  {
+    "path": "synth_hot_master_vc.wav",
+    "expected_level": "calm",
+    "category": "calm",
+    "synth": "hot_master_vc"
   }
 ]

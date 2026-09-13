@@ -74,11 +74,11 @@ def test_activity_lanes_downmix_stereo() -> None:
     assert lo_s == pytest.approx(lo_m, rel=0.15)
 
 
-def test_heat_classifier_defaults_unchanged() -> None:
+def test_heat_classifier_defaults() -> None:
     cfg = HeatConfig()
-    assert cfg.rising_rms == pytest.approx(0.045)
-    assert cfg.hot_rms == pytest.approx(0.11)
-    assert cfg.rising_slope == pytest.approx(0.07)
+    assert cfg.rising_rms == pytest.approx(0.08)
+    assert cfg.hot_rms == pytest.approx(0.22)
+    assert cfg.rising_slope == pytest.approx(0.14)
     assert cfg.drop_margin == pytest.approx(0.015)
     assert cfg.silence_rms == pytest.approx(0.008)
     assert cfg.density_fill == pytest.approx(0.85)

@@ -37,10 +37,10 @@ def test_energy_order_indices() -> None:
     for rms in [0.004] * 16:
         first.setdefault(clf.push_rms(rms).level, i)
         i += 1
-    for rms in [0.02 + 0.004 * k for k in range(14)]:
+    for rms in [0.02 + 0.012 * k for k in range(16)]:
         first.setdefault(clf.push_rms(rms).level, i)
         i += 1
-    for rms in [0.20] * 12:
+    for rms in [0.30] * 12:
         first.setdefault(clf.push_rms(rms).level, i)
         i += 1
     assert first[HeatLevel.CALM] < first[HeatLevel.RISING] < first[HeatLevel.HOT]
@@ -52,11 +52,12 @@ def test_music_steady_is_not_hot_when_normalized() -> None:
     assert score.predicted is not HeatLevel.HOT
 
 
-def test_loud_master_calm_false_hot_without_normalize() -> None:
+def test_loud_master_calm_not_false_hot() -> None:
     audio = render_synth("loud_master_calm", sr=CFG.sample_rate)
     abs_score = classify_audio(audio, CFG.sample_rate, CFG, normalize=False)
     rel_score = classify_audio(audio, CFG.sample_rate, CFG, normalize=True)
-    assert abs_score.predicted is HeatLevel.HOT
+    # Raised hot_rms: a peaky loud master is no longer majority HOT.
+    assert abs_score.predicted is not HeatLevel.HOT
     assert rel_score.predicted is not HeatLevel.HOT
 
 
@@ -81,6 +82,7 @@ def test_fixture_scorecard_and_cli(tmp_path: Path) -> None:
     assert by_name["synth_hot.wav"].predicted is HeatLevel.HOT
     assert by_name["synth_crosstalk.wav"].predicted is HeatLevel.RISING
     assert by_name["synth_loud_master_calm.wav"].predicted is not HeatLevel.HOT
+    assert by_name["synth_hot_master_vc.wav"].predicted is HeatLevel.CALM
     assert by_name["synth_music_steady.wav"].predicted is not HeatLevel.HOT
     assert by_name["synth_laughter_burst.wav"].predicted is not HeatLevel.HOT
 

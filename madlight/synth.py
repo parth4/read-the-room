@@ -19,12 +19,48 @@ SYNTH_KINDS = (
     "laughter_burst",
     "crosstalk",
     "loud_master_calm",
+    "hot_master_vc",
+    "hot_master_overlap",
 )
 
 
 def _tone(n: int, sr: int, freq: float, amp: float) -> np.ndarray:
     t = np.arange(n, dtype=np.float64) / sr
     return (amp * np.sin(2.0 * np.pi * freq * t)).astype(np.float32)
+
+
+def _hot_master_vc_talk(sr: int) -> np.ndarray:
+    """Compressed 2–5 person VC talk at near-full-scale peak.
+
+    Gaps sit above ``silence_rms`` (hot-master / AGC floor) so fill≈1, but
+    syllable RMS stays in the 0.04–0.07 band — below default ``rising_rms``.
+    """
+    n = int(6.0 * sr)
+    floor = 0.013
+    x = np.full(n, floor, dtype=np.float64)
+    hop = int(0.18 * sr)
+    dur = int(0.08 * sr)
+    for i0 in range(0, n - dur, hop):
+        x[i0 : i0 + dur] = _tone(dur, sr, 180.0, 0.105)
+    # File peak like the documented RFP recording (one loud sample).
+    x[int(0.35 * sr)] = 0.997
+    return x.astype(np.float32)
+
+
+def _hot_master_overlap(sr: int) -> np.ndarray:
+    """Talk-over in the same hot-master domain — should go rising, not hot."""
+    n = int(4.0 * sr)
+    t = np.arange(n, dtype=np.float64) / sr
+    v1 = np.sin(2.0 * np.pi * 175.0 * t) * (0.11 + 0.09 * np.sin(2.0 * np.pi * 4.2 * t))
+    v2 = np.sin(2.0 * np.pi * 255.0 * t) * (0.10 + 0.09 * np.sin(2.0 * np.pi * 5.6 * t))
+    x = v1 + v2 + 0.0
+    # Soft floor so fill stays high (compressed mix), without flattening cv.
+    x = x + 0.012 * np.sign(x + 1e-12)
+    peak = float(np.max(np.abs(x))) if x.size else 1.0
+    if peak > 0.45:
+        x = x * (0.45 / peak)
+    x[int(0.2 * sr)] = 0.997
+    return x.astype(np.float32)
 
 
 def _peakish(x: np.ndarray, peak: float = 0.95) -> np.ndarray:
@@ -53,9 +89,10 @@ def render_synth(kind: str, sr: int = 16_000) -> np.ndarray:
             x[i : i + syll.size] = syll[: max(0, n - i)]
         return x
     if kind == "rising":
-        n = int(2.0 * sr)
+        # Steep climb so peak-normalize still clears rising_slope.
+        n = int(2.4 * sr)
         t = np.arange(n, dtype=np.float64) / sr
-        amp = np.clip(0.05 + t * 0.45, 0.05, 0.75)
+        amp = np.clip(0.02 + t * 0.70, 0.02, 0.90)
         return _peakish(amp * np.sin(2.0 * np.pi * 220.0 * t))
     if kind == "hot":
         # Flattened / clipped — high RMS-to-peak (dense heat).
@@ -72,16 +109,25 @@ def render_synth(kind: str, sr: int = 16_000) -> np.ndarray:
         return _peakish(np.concatenate([quiet, burst, tail]))
     if kind == "crosstalk":
         # Two overlapping voices (priority fixture). v0 expected heat = rising.
+        # Saturated enough that peak-normalize still clears rising_rms.
         n = int(1.6 * sr)
         t = np.arange(n, dtype=np.float64) / sr
-        v1 = np.sin(2.0 * np.pi * 180.0 * t) * (0.55 + 0.45 * np.sin(2.0 * np.pi * 3.0 * t))
+        v1 = np.sin(2.0 * np.pi * 180.0 * t) * (0.62 + 0.38 * np.sin(2.0 * np.pi * 3.2 * t))
         v2 = np.zeros(n, dtype=np.float64)
         d = int(0.07 * sr)
         t2 = np.arange(n - d, dtype=np.float64) / sr
         v2[d:] = np.sin(2.0 * np.pi * 265.0 * t2) * (
-            0.55 + 0.45 * np.sin(2.0 * np.pi * 5.2 * t2)
+            0.62 + 0.38 * np.sin(2.0 * np.pi * 5.0 * t2)
         )
-        return _peakish(v1 + v2)
+        return _peakish(np.clip(v1 + v2, -1.15, 1.15))
+    if kind == "hot_master_vc":
+        # Hot WASAPI / meeting-master turn-taking: file peak ≈ 0.997, elevated
+        # floor above silence_rms, speech RMS typically below rising_rms.
+        # Early seconds should stay calm; density must not trip on the floor.
+        return _hot_master_vc_talk(sr)
+    if kind == "hot_master_overlap":
+        # Same master domain, two overlapping voices — density + rising_rms.
+        return _hot_master_overlap(sr)
     raise ValueError(f"unknown synth kind {kind!r}; want one of {SYNTH_KINDS}")
 
 

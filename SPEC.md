@@ -70,13 +70,13 @@ Suggested starting thresholds (linear amplitude 0..1; tune):
 
 | Name | Default |
 | --- | --- |
-| `rising_rms` | 0.045 |
-| `hot_rms` | 0.11 |
-| `rising_slope` | 0.035 / s |
+| `rising_rms` | 0.08 |
+| `hot_rms` | 0.22 |
+| `rising_slope` | 0.14 / s |
 | `drop_margin` | 0.015 |
 | `silence_rms` | 0.008 |
 
-Quiet + steep slope → rising. Near-silence slope noise must stay calm. Unit-test with **synthetic RMS sequences** (no microphone).
+Quiet + steep slope → rising. Near-silence slope noise must stay calm. Density (talk-over) also needs `rms >= rising_rms`, not just the silence floor — hot loopback / loud masters otherwise go amber in a couple of seconds of normal speech. Unit-test with **synthetic RMS sequences** (no microphone). Tune down on a quiet headphone mix; tune up further on a hotter WASAPI loopback.
 
 ## Stack (KISS)
 

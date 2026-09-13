@@ -43,4 +43,4 @@ No real meetings in git. Tiny WAVs are generated from `tests/fixtures/manifest.j
 madlight calibrate --manifest tests/fixtures/manifest.json
 ```
 
-Kinds: `silence`, `calm`, `rising`, `hot`, `music_steady`, `laughter_burst`, `crosstalk`, `loud_master_calm`.
+Kinds: `silence`, `calm`, `rising`, `hot`, `music_steady`, `laughter_burst`, `crosstalk`, `loud_master_calm`, `hot_master_vc` (turn-taking, expected calm), `hot_master_overlap` (talk-over in the same hot-master domain, expected rising — score with `--no-normalize`).

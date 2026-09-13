@@ -312,16 +312,21 @@ class DemoCapture:
 
 
 def _demo_amplitude(t: float) -> float:
-    """~10s loop: quiet → climb → hot → fade. Peak amplitude of a sine."""
+    """~10s loop: quiet → climb → hot → fade. Peak amplitude of the mix.
+
+    Sized for default rising_rms=0.08 / rising_slope=0.14 / hot_rms=0.22.
+    The climb is short so slope (not density) lights rising before hot.
+    """
     cycle = 10.0
     x = t % cycle
     if x < 2.0:
         return 0.006
-    if x < 5.5:
-        return 0.006 + (x - 2.0) / 3.5 * 0.10
+    if x < 3.2:
+        # ~0.33 peak/s → RMS slope clears rising_slope after the quiet head.
+        return 0.006 + (x - 2.0) / 1.2 * 0.40
     if x < 8.0:
-        return 0.22
-    return 0.22 * max(0.0, 1.0 - (x - 8.0) / 2.0)
+        return 0.48
+    return 0.48 * max(0.0, 1.0 - (x - 8.0) / 2.0)
 
 
 def _demo_band_weights(t: float) -> tuple[float, float, float]:

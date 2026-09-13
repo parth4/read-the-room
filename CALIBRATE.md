@@ -23,19 +23,19 @@ CI does **not** need those blobs. `tests/fixtures/manifest.json` generates a tin
 
 ## Files are not live volume
 
-YouTube / TED **masters are loud**. Absolute RMS on the WAV often makes a calm talk look **hot** (`rising_rms=0.045`, `hot_rms=0.11`). Hearing the same clip through headphones is a different level (sink volume, not file LUFS).
+YouTube / TED **masters are loud**. Absolute RMS on the WAV can still dwarf a headphone sink, even with the raised live defaults (`rising_rms=0.08`, `hot_rms=0.22`). Hearing the same clip through headphones is a different level (sink volume, not file LUFS).
 
-`madlight calibrate` **peak-normalizes each file by default** to a modest target peak (`0.15`) so thresholds stay in a headphone-like domain. **`--no-normalize`** scores absolute RMS (same domain as the live LED — useful to reproduce the “TED is hot” finding).
+`madlight calibrate` **peak-normalizes each file by default** to a modest target peak (`0.30`, paired with those live defaults) so thresholds stay in a headphone-like domain. **`--no-normalize`** scores absolute RMS (same domain as the live LED).
 
 ```bash
 # default: peak-normalize files (recommended for YouTube cuts)
 madlight calibrate --manifest samples/manifest.csv
 
-# prove masters look hot in the live domain
+# live-domain score (hot WASAPI / meeting-master files)
 madlight calibrate --manifest samples/manifest.csv --no-normalize
 
-# optional target peak (default 0.15)
-madlight calibrate --manifest samples/manifest.csv --normalize-peak 0.12
+# optional target peak (default 0.30)
+madlight calibrate --manifest samples/manifest.csv --normalize-peak 0.24
 ```
 
 The running app (`madlight` without `calibrate`) is unchanged: monitor RMS is whatever you actually play.
@@ -71,7 +71,7 @@ madlight calibrate --manifest samples/manifest.csv --propose
 `--propose` grid-searches `rising_rms` / `hot_rms` / `rising_slope`. If you used `--normalize` (default), those flags are for the **normalized file domain**. Live playback volume ≠ file LUFS — **listen-test** before pasting onto `madlight`.
 
 ```text
-proposed  accuracy=83%  --rising-rms 0.06 --hot-rms 0.14 --rising-slope 0.035
+proposed  accuracy=83%  --rising-rms 0.08 --hot-rms 0.22 --rising-slope 0.14
 note: flags are for this file-scoring mode. Live playback volume ≠ file LUFS.
 ```
 
@@ -90,6 +90,7 @@ The live LED path is absolute RMS, plus a **density** cue:
 - calm turn-taking speech is peaky with gaps → high crest
 - talk-over / heated stretch is fuller → high fill, lower crest, some modulation (`cv`)
 - flat music is full but `cv ≈ 0` → stays out of the density path
+- density enter also requires `rms >= rising_rms` (not `silence_rms`) so a hot master / WASAPI loopback does not go amber on normal VC talk
 
-Defaults tuned on Omarchy against YouTube debate crosstalk vs a calm TED slice (`--no-normalize`, live domain). Peak-normalize is for synth/CI only; do not expect real talk-over to score the same under `--normalize`.
+Defaults target 2–5 person calls on a hot mix. Peak-normalize is for synth/CI; do not expect real talk-over to score the same under `--normalize`.
 
