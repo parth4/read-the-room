@@ -25,7 +25,8 @@ RING = CARD
 ICON = "#C8C8C8"
 ICON_DIM = "#8A8A8A"
 HANDLE = "#9A9A9A"
-PAUSE_MARK = "#D0D0D0"
+MARK_ON_GRAY = "#E4E4E4"
+MARK_ON_HEAT = "#1A1A1A"
 
 LABEL = {
     HeatLevel.CALM: "calm",
@@ -61,8 +62,12 @@ WAVE_DIM = "#3F3F3F"
 HELP_TEXT = (
     "Mad Light — meeting heat from the local loopback mix.\n\n"
     "Center: click to pause / resume listening.\n"
+    "Mic = listening (armed). Pause bars = capture off.\n"
     "Green calm · amber rising · red hot.\n"
-    "Dark gray = paused or idle (not live).\n\n"
+    "Dark gray + mic = silence, still listening.\n"
+    "Dark gray + pause = paused, not listening.\n"
+    "+ / − : this heat feels right / wrong (local log only).\n"
+    "Gear: pause, sensitivity, help.\n\n"
     "Activity lanes are low / mid / high frequency bands "
     "of the same mix — not speaker names, not diarization."
 )
@@ -72,6 +77,27 @@ def led_fill(*, listening: bool, idle: bool, level: HeatLevel) -> str:
     """Grey when paused or near-silent; heat colors only while listening with energy."""
     if (not listening) or idle:
         return PALETTE["off"]
+    return PALETTE[level]
+
+
+def center_mark(*, listening: bool) -> str:
+    """Glyph on the heat circle: pause bars when capture is off, mic when armed."""
+    return "mic" if listening else "pause"
+
+
+def center_mark_fill(*, listening: bool, idle: bool) -> str:
+    """Light marks on grey; dark marks so heat color stays the hero."""
+    if (not listening) or idle:
+        return MARK_ON_GRAY
+    return MARK_ON_HEAT
+
+
+def center_ring(*, listening: bool, idle: bool, level: HeatLevel) -> str:
+    """Paused stays a dead edge; idle listening reads armed; heat matches the fill."""
+    if not listening:
+        return CARD_EDGE
+    if idle:
+        return ICON_DIM
     return PALETTE[level]
 
 
@@ -111,12 +137,18 @@ class DotWindow:
         *,
         on_off: Callable[[], None],
         on_quit: Callable[[], None],
+        on_feedback: Callable[[str], None] | None = None,
+        on_sensitivity: Callable[[str], None] | None = None,
+        get_sensitivity: Callable[[], str] | None = None,
     ) -> None:
         import tkinter as tk
 
         self._tk = tk
         self._on_off = on_off
         self._on_quit = on_quit
+        self._on_feedback = on_feedback
+        self._on_sensitivity = on_sensitivity
+        self._get_sensitivity = get_sensitivity or (lambda: "default")
         self._paused = False
         self._help_win: Any = None
         self.root = tk.Tk()
@@ -154,6 +186,12 @@ class DotWindow:
         self._handle = self._canvas.create_rectangle(
             hx0, hy0, hx0 + 28, hy0 + 3, fill=HANDLE, outline="", tags=("handle",)
         )
+        self._up_mark = self._canvas.create_text(
+            12, 10, text="+", fill=ICON, font=("Sans", 12, "bold"), tags=("up",)
+        )
+        self._down_mark = self._canvas.create_text(
+            28, 10, text="−", fill=ICON, font=("Sans", 12, "bold"), tags=("down",)
+        )
         self._close_x = WIN_W - 16
         self._close_y = 10
         self._close_a = self._canvas.create_line(
@@ -179,17 +217,19 @@ class DotWindow:
 
         r = DOT_PX / 2
         self._led_ring = self._canvas.create_oval(
-            cx - r - 2, cy - r - 2, cx + r + 2, cy + r + 2, outline=CARD_EDGE, width=2
+            cx - r - 2, cy - r - 2, cx + r + 2, cy + r + 2, outline=ICON_DIM, width=2
         )
         self._led = self._canvas.create_oval(
             cx - r, cy - r, cx + r, cy + r, fill=PALETTE["off"], outline=""
         )
         self._pause_a = self._canvas.create_rectangle(
-            cx - 5, cy - 7, cx - 2, cy + 7, fill=PAUSE_MARK, outline=""
+            cx - 7, cy - 9, cx - 2, cy + 9, fill=MARK_ON_GRAY, outline=""
         )
         self._pause_b = self._canvas.create_rectangle(
-            cx + 2, cy - 7, cx + 5, cy + 7, fill=PAUSE_MARK, outline=""
+            cx + 2, cy - 9, cx + 7, cy + 9, fill=MARK_ON_GRAY, outline=""
         )
+        self._draw_mic(cx, cy)
+        # Default: listening + idle (armed) until the first tick.
         self._canvas.itemconfig(self._pause_a, state="hidden")
         self._canvas.itemconfig(self._pause_b, state="hidden")
 
@@ -239,6 +279,33 @@ class DotWindow:
         self._canvas.bind("<Escape>", lambda _e: self._on_off())
         self._canvas.bind("<space>", lambda _e: self._on_off())
 
+    def _draw_mic(self, cx: int, cy: int) -> None:
+        # Classic capsule + U-yoke + stem — reads as a listen control at 44px.
+        self._mic_head = self._canvas.create_oval(
+            cx - 4, cy - 12, cx + 4, cy, fill=MARK_ON_GRAY, outline="", tags=("mic",)
+        )
+        self._mic_yoke = self._canvas.create_arc(
+            cx - 8, cy - 5, cx + 8, cy + 9,
+            start=180,
+            extent=180,
+            style="arc",
+            outline=MARK_ON_GRAY,
+            width=2,
+            tags=("mic",),
+        )
+        self._mic_stem = self._canvas.create_line(
+            cx, cy + 8, cx, cy + 12, fill=MARK_ON_GRAY, width=2, tags=("mic",)
+        )
+        self._mic_base = self._canvas.create_line(
+            cx - 5, cy + 12, cx + 5, cy + 12, fill=MARK_ON_GRAY, width=2, tags=("mic",)
+        )
+
+    def _paint_mic(self, color: str, state: str) -> None:
+        self._canvas.itemconfig(self._mic_head, fill=color, state=state)
+        self._canvas.itemconfig(self._mic_yoke, outline=color, state=state)
+        self._canvas.itemconfig(self._mic_stem, fill=color, state=state)
+        self._canvas.itemconfig(self._mic_base, fill=color, state=state)
+
     def _draw_gear(self, cx: int, cy: int) -> None:
         # Outline cog — chrome only, not a settings panel.
         teeth: list[float] = []
@@ -254,6 +321,8 @@ class DotWindow:
     def _hit_boxes(self) -> dict[str, tuple[int, int, int, int]]:
         return {
             "close": (WIN_W - 28, 0, WIN_W, CHROME_H + 2),
+            "up": (2, 0, 20, CHROME_H + 2),
+            "down": (20, 0, 38, CHROME_H + 2),
             "handle": (WIN_W // 2 - 24, 0, WIN_W // 2 + 24, CHROME_H),
             "gear": (self._side_gear - 12, ROW_CY - 12, self._side_gear + 12, ROW_CY + 12),
             "help": (self._side_help - 12, ROW_CY - 12, self._side_help + 12, ROW_CY + 12),
@@ -261,7 +330,7 @@ class DotWindow:
 
     def hit_test(self, x: float, y: float) -> str:
         boxes = self._hit_boxes()
-        for name in ("close", "gear", "help", "handle"):
+        for name in ("close", "up", "down", "gear", "help", "handle"):
             if _in_rect(x, y, boxes[name]):
                 return name
         cx, cy = center_xy()
@@ -271,7 +340,7 @@ class DotWindow:
 
     def _hover(self, event: Any) -> None:
         hit = self.hit_test(event.x, event.y)
-        cursor = "hand2" if hit in {"center", "close", "gear", "help"} else "fleur" if hit in {"handle", "card"} else "arrow"
+        cursor = "hand2" if hit in {"center", "close", "gear", "help", "up", "down"} else "fleur" if hit in {"handle", "card"} else "arrow"
         try:
             self._canvas.configure(cursor=cursor)
         except Exception:
@@ -311,11 +380,44 @@ class DotWindow:
             self._menu(event)
         elif hit == "help":
             self._show_help()
+        elif hit == "up":
+            self._feedback("up")
+        elif hit == "down":
+            self._feedback("down")
+
+    def _feedback(self, label: str) -> None:
+        if self._on_feedback is None:
+            return
+        mark = self._up_mark if label == "up" else self._down_mark
+        flash = PALETTE[HeatLevel.CALM] if label == "up" else PALETTE[HeatLevel.HOT]
+        try:
+            self._canvas.itemconfig(mark, fill=flash)
+            self.root.after(280, lambda: self._canvas.itemconfig(mark, fill=ICON))
+        except Exception:
+            pass
+        self._on_feedback(label)
 
     def _menu(self, event: Any) -> None:
         menu = self._tk.Menu(self.root, tearoff=0, bg=CARD, fg=ICON, activebackground="#3A3A3A")
         pause_label = "Resume listening" if self._paused else "Pause listening"
         menu.add_command(label=pause_label, command=self._on_off)
+        if self._on_feedback is not None:
+            menu.add_separator()
+            menu.add_command(label="Heat feels right", command=lambda: self._feedback("up"))
+            menu.add_command(label="Heat feels wrong", command=lambda: self._feedback("down"))
+        if self._on_sensitivity is not None:
+            current = self._get_sensitivity()
+            menu.add_separator()
+            for name, title in (
+                ("lower", "Sensitivity: lower"),
+                ("default", "Sensitivity: default"),
+                ("higher", "Sensitivity: higher"),
+            ):
+                mark = "  ✓" if name == current else ""
+                menu.add_command(
+                    label=title + mark,
+                    command=lambda n=name: self._on_sensitivity(n),
+                )
         menu.add_separator()
         menu.add_command(label="Activity lanes: low / mid / high (not speakers)", command=self._show_help)
         menu.add_separator()
@@ -371,13 +473,15 @@ class DotWindow:
     ) -> None:
         self._paused = not listening
         color = led_fill(listening=listening, idle=idle, level=level)
-        live = listening and not idle
+        ink = center_mark_fill(listening=listening, idle=idle)
+        mark = center_mark(listening=listening)
         self._canvas.itemconfig(self._led, fill=color)
-        ring = color if live else CARD_EDGE
-        self._canvas.itemconfig(self._led_ring, outline=ring)
-        pause_state = "normal" if not listening else "hidden"
-        self._canvas.itemconfig(self._pause_a, state=pause_state)
-        self._canvas.itemconfig(self._pause_b, state=pause_state)
+        self._canvas.itemconfig(self._led_ring, outline=center_ring(listening=listening, idle=idle, level=level))
+        pause_state = "normal" if mark == "pause" else "hidden"
+        mic_state = "normal" if mark == "mic" else "hidden"
+        self._canvas.itemconfig(self._pause_a, state=pause_state, fill=ink)
+        self._canvas.itemconfig(self._pause_b, state=pause_state, fill=ink)
+        self._paint_mic(ink, mic_state)
 
         dim = not listening
         wave_color = WAVE_DIM if dim else WAVE_LIVE

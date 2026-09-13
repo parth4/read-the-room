@@ -37,10 +37,10 @@ def test_energy_order_indices() -> None:
     for rms in [0.004] * 16:
         first.setdefault(clf.push_rms(rms).level, i)
         i += 1
-    for rms in [0.02 + 0.012 * k for k in range(16)]:
+    for rms in [0.02 + 0.006 * k for k in range(40)]:
         first.setdefault(clf.push_rms(rms).level, i)
         i += 1
-    for rms in [0.30] * 12:
+    for rms in [0.30] * 16:
         first.setdefault(clf.push_rms(rms).level, i)
         i += 1
     assert first[HeatLevel.CALM] < first[HeatLevel.RISING] < first[HeatLevel.HOT]

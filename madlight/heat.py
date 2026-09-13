@@ -46,6 +46,14 @@ class HeatConfig:
     density_fill: float = 0.85
     density_crest_max: float = 2.0
     density_cv_min: float = 0.25
+    # Climb must hold before calm→rising (one emphatic word is not yellow).
+    # Density already integrates over window_seconds — only a short confirm.
+    rise_dwell_seconds: float = 1.2
+    density_dwell_seconds: float = 0.15
+    hot_dwell_seconds: float = 0.45
+    # Card meters: append a wave bar every N blocks; EMA the lanes.
+    meter_stride: int = 3
+    lane_ema: float = 0.16
 
     @property
     def block_frames(self) -> int:
@@ -58,6 +66,18 @@ class HeatConfig:
     @property
     def slope_blocks(self) -> int:
         return max(2, int(self.slope_seconds * 1000 / self.block_ms))
+
+    @property
+    def rise_dwell_blocks(self) -> int:
+        return max(1, int(round(self.rise_dwell_seconds * 1000 / self.block_ms)))
+
+    @property
+    def density_dwell_blocks(self) -> int:
+        return max(1, int(round(self.density_dwell_seconds * 1000 / self.block_ms)))
+
+    @property
+    def hot_dwell_blocks(self) -> int:
+        return max(1, int(round(self.hot_dwell_seconds * 1000 / self.block_ms)))
 
 
 @dataclass(frozen=True)
@@ -131,6 +151,36 @@ def activity_lanes(
     return tuple(bands)
 
 
+def _level_rank(level: HeatLevel) -> int:
+    if level is HeatLevel.HOT:
+        return 2
+    if level is HeatLevel.RISING:
+        return 1
+    return 0
+
+
+def rise_triggers(
+    rms: float,
+    slope: float,
+    current: HeatLevel,
+    cfg: HeatConfig,
+    *,
+    fill: float = 0.0,
+    crest: float = 0.0,
+    cv: float = 0.0,
+) -> tuple[bool, bool]:
+    """Return (climbing, dense) using the same cuts as classify_heat."""
+    slope_cut = cfg.rising_slope * 0.4 if current is HeatLevel.RISING else cfg.rising_slope
+    climbing = slope >= slope_cut and rms >= cfg.silence_rms
+    dense = (
+        fill >= cfg.density_fill
+        and 0.0 < crest <= cfg.density_crest_max
+        and cv >= cfg.density_cv_min
+        and rms >= cfg.rising_rms
+    )
+    return climbing, dense
+
+
 def classify_heat(
     rms: float,
     slope: float,
@@ -141,11 +191,13 @@ def classify_heat(
     crest: float = 0.0,
     cv: float = 0.0,
 ) -> HeatLevel:
-    """Map smoothed RMS + slope + density to heat, with hysteresis."""
+    """Map smoothed RMS + slope + density to heat, with hysteresis.
+
+    Instantaneous candidate only. HeatClassifier applies dwell before a
+    promotion becomes the displayed level.
+    """
     hot_enter, hot_hold = cfg.hot_rms, cfg.hot_rms - cfg.drop_margin
     rise_enter, rise_hold = cfg.rising_rms, cfg.rising_rms - cfg.drop_margin
-    slope_enter = cfg.rising_slope
-    slope_hold = cfg.rising_slope * 0.4
 
     hot_cut = hot_hold if current is HeatLevel.HOT else hot_enter
     if rms >= hot_cut:
@@ -153,18 +205,8 @@ def classify_heat(
 
     in_heat = current is not HeatLevel.CALM
     rms_cut = rise_hold if in_heat else rise_enter
-    slope_cut = slope_hold if current is HeatLevel.RISING else slope_enter
-    climbing = slope >= slope_cut and rms >= cfg.silence_rms
-    # Density: continuous/modulated energy (crosstalk), not peaky monologue,
-    # not flat music (cv ~ 0). Gate on rising_rms — silence_rms is far too
-    # low on hot masters / WASAPI loopback (compressed speech sits above
-    # 0.008 for the whole 2 s window, so fill≈1 and the LED went yellow
-    # in ~2–3 s of normal VC talk).
-    dense = (
-        fill >= cfg.density_fill
-        and 0.0 < crest <= cfg.density_crest_max
-        and cv >= cfg.density_cv_min
-        and rms >= cfg.rising_rms
+    climbing, dense = rise_triggers(
+        rms, slope, current, cfg, fill=fill, crest=crest, cv=cv
     )
     # Absolute loud alone is NOT rising (that false-fired calm TED).
     # Climb or dense talk-over is.
@@ -175,6 +217,50 @@ def classify_heat(
     return HeatLevel.CALM
 
 
+def ema(prev: float, new: float, alpha: float) -> float:
+    a = max(0.0, min(1.0, float(alpha)))
+    return (1.0 - a) * float(prev) + a * float(new)
+
+
+class MeterSmoother:
+    """Slow the card meters: one wave bar every N blocks, EMA on lanes."""
+
+    def __init__(
+        self,
+        *,
+        bars: int = 28,
+        stride: int = 3,
+        lane_alpha: float = 0.16,
+    ) -> None:
+        self.bars = max(1, bars)
+        self.stride = max(1, stride)
+        self.lane_alpha = float(lane_alpha)
+        self.wave = [0.0] * self.bars
+        self.lanes: tuple[float, float, float] = (0.0, 0.0, 0.0)
+        self._acc: list[float] = []
+
+    def reset(self) -> None:
+        self.wave = [0.0] * self.bars
+        self.lanes = (0.0, 0.0, 0.0)
+        self._acc = []
+
+    def push(
+        self, rms: float, lanes: tuple[float, ...]
+    ) -> tuple[list[float], tuple[float, float, float]]:
+        self._acc.append(float(max(0.0, rms)))
+        if len(self._acc) >= self.stride:
+            avg = sum(self._acc) / len(self._acc)
+            self._acc.clear()
+            self.wave = self.wave[1:] + [avg]
+        incoming = (tuple(float(v) for v in lanes) + (0.0, 0.0, 0.0))[:3]
+        self.lanes = (
+            ema(self.lanes[0], incoming[0], self.lane_alpha),
+            ema(self.lanes[1], incoming[1], self.lane_alpha),
+            ema(self.lanes[2], incoming[2], self.lane_alpha),
+        )
+        return list(self.wave), self.lanes
+
+
 class HeatClassifier:
     """Rolling RMS buffer → smoothed energy, slope, density, heat level."""
 
@@ -182,6 +268,7 @@ class HeatClassifier:
         self.config = config or HeatConfig()
         self._rms = deque(maxlen=self.config.window_blocks)
         self._level = HeatLevel.CALM
+        self._up_hold = 0
 
     @property
     def level(self) -> HeatLevel:
@@ -190,16 +277,45 @@ class HeatClassifier:
     def reset(self) -> None:
         self._rms.clear()
         self._level = HeatLevel.CALM
+        self._up_hold = 0
 
     def push_block(self, samples: np.ndarray) -> HeatSample:
         return self.push_rms(block_rms(samples))
+
+    def _apply_dwell(
+        self,
+        candidate: HeatLevel,
+        *,
+        rms: float,
+        slope: float,
+        fill: float,
+        crest: float,
+        cv: float,
+    ) -> HeatLevel:
+        if _level_rank(candidate) <= _level_rank(self._level):
+            self._up_hold = 0
+            return candidate
+        climbing, dense = rise_triggers(
+            rms, slope, self._level, self.config, fill=fill, crest=crest, cv=cv
+        )
+        if candidate is HeatLevel.HOT:
+            need = self.config.hot_dwell_blocks
+        elif climbing:
+            need = self.config.rise_dwell_blocks
+        else:
+            need = self.config.density_dwell_blocks
+        self._up_hold += 1
+        if self._up_hold >= need:
+            self._up_hold = 0
+            return candidate
+        return self._level
 
     def push_rms(self, rms: float) -> HeatSample:
         self._rms.append(float(max(0.0, rms)))
         smoothed = self.smoothed_rms()
         slope = self.slope_per_second()
         fill, crest, cv = self.density()
-        self._level = classify_heat(
+        candidate = classify_heat(
             smoothed,
             slope,
             self._level,
@@ -207,6 +323,9 @@ class HeatClassifier:
             fill=fill,
             crest=crest,
             cv=cv,
+        )
+        self._level = self._apply_dwell(
+            candidate, rms=smoothed, slope=slope, fill=fill, crest=crest, cv=cv
         )
         return HeatSample(
             level=self._level,

@@ -34,9 +34,18 @@ These are the north-star uses. They are why the light exists. **v0 still only sh
 | **green** | calm — listening, steady low-but-present energy |
 | **amber** | rising — mid energy, or energy climbing quickly |
 | **red** | hot — high RMS |
-| **dark grey** | paused, or sustained near-silence (not listening / idle) |
+| **dark grey + mic** | listening, sustained near-silence (armed, not paused) |
+| **dark grey + pause bars** | paused — capture off |
 
-The overlay is a **compact floating card** (Voice Access–style chrome, not a dashboard): drag handle and close, a **center circle** for listening/heat, gear / help, a thin level under the circle, and **three activity lanes** (low / mid / high bands of the loopback mix). No speaker names. The tray icon mirrors the circle color. **Pause** is a click on the center circle (or Space / Escape / tray). Pause **stops capture immediately** (same kill switch as `--text` `off` / `pause`). Drag the handle or card to move; close quits.
+The overlay is a **compact floating card** (Voice Access–style chrome, not a dashboard): drag handle and close, **+ / −** (this heat feels right / wrong), a **center circle** (mic while listening, pause bars when capture is off), gear / help, a thin level under the circle, and **three activity lanes** (low / mid / high bands of the loopback mix). No speaker names. The tray icon mirrors the circle color. **Pause** is a click on the center circle (or Space / Escape / tray). Pause **stops capture immediately** (same kill switch as `--text` `off` / `pause`). Drag the handle or card to move; close quits.
+
+Yellow waits for a **dwell** (~1.2 s of climb) so one emphatic word does not flip the dial. Waveform bars and activity lanes are smoothed (EMA / longer stride), not spike-chasing. Gear **sensitivity** (lower / default / higher) and thumbs write **local** files only — no audio, no cloud:
+
+- Linux: `~/.config/madlight/prefs.json` and `feedback.jsonl`
+- Windows: `%APPDATA%\madlight\`
+- Override the directory with `MADLIGHT_CONFIG_DIR`
+
+`feedback.jsonl` is one JSON object per line (`ts`, `label`, `level`, `rms`, `slope`, `fill` / `crest` / `cv`). After five thumbs-down of the same kind (too hot vs too cold), thresholds nudge slightly and persist. `madlight calibrate --from-feedback` is not implemented yet.
 
 ## Privacy
 
@@ -160,7 +169,8 @@ madlight --demo --text
 
 # 3. Synthetic GUI (no meeting):
 madlight --demo --no-tray
-# floating card: grey center when silent or paused; green/amber/red when energy;
+# floating card: grey+mic when silent (still listening); grey+pause when paused;
+# green/amber/red + mic when energy;
 # waveform under the circle; three activity lanes move independently
 # click the center to pause / resume; × closes
 
@@ -192,8 +202,10 @@ Defaults target **2–5 person video calls** on a hot loopback / loud meeting ma
 - density (talk-over) enters only when `rms >= rising_rms` — not the `silence_rms` floor
 - 50 ms blocks, 2 s RMS window, 0.6 s slope window, hysteresis via `drop_margin`
 - idle grey uses the same `silence_rms = 0.008` floor as the classifier (smoothed RMS)
+- climb must hold `rise_dwell_seconds = 1.2` before calm→rising; density already integrates over the 2 s window
+- meters: one waveform bar every 3 blocks (~150 ms); activity lanes use EMA 0.16
 
-`--text` prints `rms`, `slope`, and dBFS so you can nudge `--rising-rms` / `--hot-rms` / `--rising-slope`. Quiet Linux headphone mixes may need **lower** flags; a still-hotter Windows loopback may need **higher** ones. The LED stays three heat colors plus dark grey (paused / idle).
+`--text` prints `rms`, `slope`, and dBFS so you can nudge `--rising-rms` / `--hot-rms` / `--rising-slope`. Quiet Linux headphone mixes may need **lower** flags; a still-hotter Windows loopback may need **higher** ones. The LED stays three heat colors plus dark grey (idle listening vs paused are the same grey, different center glyph).
 
 ## Windows
 

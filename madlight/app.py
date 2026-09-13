@@ -23,9 +23,18 @@ from madlight.heat import (
     HeatConfig,
     HeatLevel,
     HeatSample,
+    MeterSmoother,
     activity_lanes,
     block_rms,
     is_idle,
+)
+from madlight.prefs import (
+    apply_prefs,
+    append_feedback,
+    load_prefs,
+    note_feedback,
+    save_prefs,
+    set_sensitivity,
 )
 
 # Keep in sync with madlight.ui.WAVE_BARS (history of capture-block RMS).
@@ -43,6 +52,8 @@ class Runtime:
     lanes: tuple[float, float, float] = (0.0, 0.0, 0.0)
     source_label: str = ""
     error: str | None = None
+    config: HeatConfig = field(default_factory=HeatConfig)
+    meter: MeterSmoother = field(default_factory=lambda: MeterSmoother(bars=_WAVE_BARS))
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def snapshot(
@@ -74,6 +85,7 @@ class Runtime:
                 self.level = HeatLevel.CALM
                 self.sample = None
                 self.idle = True
+                self.meter.reset()
                 self.wave = [0.0] * len(self.wave)
                 self.lanes = (0.0, 0.0, 0.0)
 
@@ -86,6 +98,12 @@ class Runtime:
     def stopped(self) -> bool:
         with self.lock:
             return self.stop
+
+    def apply_config(self, cfg: HeatConfig) -> None:
+        with self.lock:
+            self.config = cfg
+            self.meter.stride = max(1, cfg.meter_stride)
+            self.meter.lane_alpha = cfg.lane_ema
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -139,8 +157,8 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _config_from_args(args: argparse.Namespace) -> HeatConfig:
-    cfg = HeatConfig()
+def _config_from_args(args: argparse.Namespace, base: HeatConfig | None = None) -> HeatConfig:
+    cfg = base or HeatConfig()
     updates = {}
     if args.rising_rms is not None:
         updates["rising_rms"] = args.rising_rms
@@ -179,6 +197,8 @@ def _audio_loop(runtime: Runtime, config: HeatConfig, source: MonitorSource, bac
         while not runtime.stopped():
             with runtime.lock:
                 listening = runtime.listening
+                classifier.config = runtime.config
+                cfg = runtime.config
             if not listening:
                 if capture is not None:
                     capture.close()
@@ -186,6 +206,7 @@ def _audio_loop(runtime: Runtime, config: HeatConfig, source: MonitorSource, bac
                     classifier.reset()
                 with runtime.lock:
                     runtime.idle = True
+                    runtime.meter.reset()
                     runtime.wave = [0.0] * len(runtime.wave)
                     runtime.lanes = (0.0, 0.0, 0.0)
                     runtime.sample = None
@@ -194,7 +215,7 @@ def _audio_loop(runtime: Runtime, config: HeatConfig, source: MonitorSource, bac
                 continue
             if capture is None:
                 try:
-                    capture = open_capture(source, config, backend=backend)
+                    capture = open_capture(source, cfg, backend=backend)
                     with runtime.lock:
                         runtime.source_label = capture.source.label
                         runtime.error = None
@@ -216,17 +237,17 @@ def _audio_loop(runtime: Runtime, config: HeatConfig, source: MonitorSource, bac
                 continue
             sample = classifier.push_block(block)
             instant = block_rms(block)
-            lanes = activity_lanes(block, config.sample_rate)
-            leftover = config.block_ms / 1000.0 - (time.monotonic() - t0)
+            lanes = activity_lanes(block, cfg.sample_rate)
+            leftover = cfg.block_ms / 1000.0 - (time.monotonic() - t0)
             if leftover > 0:
                 time.sleep(leftover)
             with runtime.lock:
+                wave, smooth_lanes = runtime.meter.push(instant, lanes)
                 runtime.level = sample.level
                 runtime.sample = sample
-                runtime.idle = is_idle(sample.rms, config.silence_rms)
-                runtime.wave.pop(0)
-                runtime.wave.append(instant)
-                runtime.lanes = (lanes + (0.0, 0.0, 0.0))[:3]
+                runtime.idle = is_idle(sample.rms, cfg.silence_rms)
+                runtime.wave = wave
+                runtime.lanes = smooth_lanes
     finally:
         if capture is not None:
             capture.close()
@@ -289,6 +310,29 @@ def _run_gui(runtime: Runtime, *, dot: bool, tray: bool) -> bool:
         if tray_ctl is not None:
             tray_ctl.stop()
 
+    def on_feedback(label: str) -> None:
+        listening, level, sample, _err, idle, _wave, _lanes = runtime.snapshot()
+        with runtime.lock:
+            cfg = runtime.config
+        append_feedback(
+            label,
+            sample=sample,
+            listening=listening,
+            idle=idle,
+            level=level,
+            extra={"rising_rms": cfg.rising_rms, "hot_rms": cfg.hot_rms},
+        )
+        prefs = load_prefs()
+        prefs, nudged = note_feedback(prefs, label, level, idle=idle)
+        save_prefs(prefs)
+        if nudged:
+            runtime.apply_config(apply_prefs(HeatConfig(), prefs))
+
+    def on_sensitivity(name: str) -> None:
+        prefs = set_sensitivity(load_prefs(), name)
+        save_prefs(prefs)
+        runtime.apply_config(apply_prefs(HeatConfig(), prefs))
+
     if dot:
         try:
             from madlight.ui import DotWindow
@@ -296,6 +340,9 @@ def _run_gui(runtime: Runtime, *, dot: bool, tray: bool) -> bool:
             dot_win = DotWindow(
                 on_off=toggle_off,
                 on_quit=quit_app,
+                on_feedback=on_feedback,
+                on_sensitivity=on_sensitivity,
+                get_sensitivity=lambda: load_prefs().sensitivity_name(),
             )
         except Exception as exc:
             print(f"LED unavailable ({exc})", file=sys.stderr)
@@ -380,8 +427,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.list_sources:
         return _print_sources()
 
-    config = _config_from_args(args)
+    prefs = load_prefs()
+    config = _config_from_args(args, base=apply_prefs(HeatConfig(), prefs))
     runtime = Runtime()
+    runtime.apply_config(config)
 
     def handle_signal(_signum: int, _frame: object | None) -> None:
         runtime.request_stop()

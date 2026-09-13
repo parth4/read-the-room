@@ -90,7 +90,7 @@ def render_synth(kind: str, sr: int = 16_000) -> np.ndarray:
         return x
     if kind == "rising":
         # Steep climb so peak-normalize still clears rising_slope.
-        n = int(2.4 * sr)
+        n = int(4.0 * sr)
         t = np.arange(n, dtype=np.float64) / sr
         amp = np.clip(0.02 + t * 0.70, 0.02, 0.90)
         return _peakish(amp * np.sin(2.0 * np.pi * 220.0 * t))
