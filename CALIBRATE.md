@@ -82,3 +82,14 @@ Optional peak-normalize, then 50 ms RMS blocks (same classifier as the LED). Aft
 ## Privacy
 
 Clips stay on your disk. No network, no model upload. Do not commit real meeting audio.
+
+## Density (calm vs crosstalk)
+
+The live LED path is absolute RMS, plus a **density** cue:
+
+- calm turn-taking speech is peaky with gaps → high crest
+- talk-over / heated stretch is fuller → high fill, lower crest, some modulation (`cv`)
+- flat music is full but `cv ≈ 0` → stays out of the density path
+
+Defaults tuned on Omarchy against YouTube debate crosstalk vs a calm TED slice (`--no-normalize`, live domain). Peak-normalize is for synth/CI only; do not expect real talk-over to score the same under `--normalize`.
+

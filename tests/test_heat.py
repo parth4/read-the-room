@@ -21,9 +21,12 @@ CFG = HeatConfig(
     slope_seconds=0.6,
     rising_rms=0.045,
     hot_rms=0.11,
-    rising_slope=0.035,
+    rising_slope=0.07,
     drop_margin=0.015,
     silence_rms=0.008,
+    density_fill=0.85,
+    density_crest_max=2.0,
+    density_cv_min=0.25,
 )
 
 
@@ -53,8 +56,30 @@ def test_loud_steady_is_hot() -> None:
     assert classify_heat(0.20, 0.0, HeatLevel.CALM, CFG) is HeatLevel.HOT
 
 
-def test_medium_energy_is_rising() -> None:
-    assert classify_heat(0.06, 0.0, HeatLevel.CALM, CFG) is HeatLevel.RISING
+def test_medium_energy_without_slope_stays_calm() -> None:
+    # Absolute medium loudness alone is not heat (calm monologue peaks).
+    assert classify_heat(0.06, 0.0, HeatLevel.CALM, CFG) is HeatLevel.CALM
+
+
+def test_density_crosstalk_is_rising() -> None:
+    assert (
+        classify_heat(0.05, 0.0, HeatLevel.CALM, CFG, fill=0.85, crest=1.8, cv=0.6)
+        is HeatLevel.RISING
+    )
+
+
+def test_peaky_monologue_density_stays_calm() -> None:
+    assert (
+        classify_heat(0.05, 0.0, HeatLevel.CALM, CFG, fill=0.76, crest=4.5, cv=1.1)
+        is HeatLevel.CALM
+    )
+
+
+def test_flat_music_density_stays_calm() -> None:
+    assert (
+        classify_heat(0.08, 0.0, HeatLevel.CALM, CFG, fill=1.0, crest=1.0, cv=0.0)
+        is HeatLevel.CALM
+    )
 
 
 def test_quiet_but_climbing_slope_is_rising() -> None:
@@ -130,3 +155,28 @@ def test_classifier_push_block_matches_push_rms() -> None:
     b = clf_b.push_rms(block_rms(block))
     assert a.level == b.level
     assert a.rms == pytest.approx(b.rms)
+
+
+def test_classifier_dense_stream_is_rising() -> None:
+    """Low-crest continuous modulated energy → rising (crosstalk-like)."""
+    clf = HeatClassifier(CFG)
+    # Alternate mild levels around a floor — dense, not peaky.
+    sample = None
+    for i in range(40):
+        # stronger modulation so cv clears density_cv_min
+        sample = clf.push_rms(0.035 + (0.025 if i % 2 == 0 else 0.0))
+    assert sample is not None
+    assert sample.crest <= CFG.density_crest_max
+    assert sample.level is HeatLevel.RISING
+
+
+def test_classifier_peaky_stream_stays_calm() -> None:
+    """Sparse peaks with gaps → calm (monologue-like)."""
+    clf = HeatClassifier(CFG)
+    sample = None
+    pattern = [0.002] * 6 + [0.12] + [0.002] * 6 + [0.10]
+    for _ in range(4):
+        for rms in pattern:
+            sample = clf.push_rms(rms)
+    assert sample is not None
+    assert sample.crest > CFG.density_crest_max or sample.level is HeatLevel.CALM
