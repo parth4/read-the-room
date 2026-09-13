@@ -32,6 +32,8 @@ A single always-on-top **recording-indicator LED**: **green / amber / red** (cal
 
 That is the whole v0 product. Install and run it; do not wait for v1.
 
+Offline **`madlight calibrate`** (see [CALIBRATE.md](CALIBRATE.md)) scores labeled clips against these same thresholds and can propose `--rising-rms` / `--hot-rms` flags. Grid search, not neural training, not cloud. No thumbs on the v0 LED.
+
 ## v1 — Stacking / interrupt signals (still local)
 
 Same machine, same “what you already hear” capture. Add **more audio features**, still not a transcript:

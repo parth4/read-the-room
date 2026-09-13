@@ -60,6 +60,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "(recording-indicator dot). Captures the default sink monitor "
             "(headphones or speakers), never the cloud."
         ),
+        epilog="Offline critic: madlight calibrate --manifest FILE  (see CALIBRATE.md)",
     )
     p.add_argument("--version", action="version", version=f"madlight {__version__}")
     p.add_argument(
@@ -321,6 +322,12 @@ def _run_gui(runtime: Runtime, *, dot: bool, tray: bool) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "calibrate":
+        from madlight.calibrate import main as calibrate_main
+
+        return calibrate_main(argv[1:])
+
     args = _build_parser().parse_args(argv)
     if args.list_sources:
         return _print_sources()
