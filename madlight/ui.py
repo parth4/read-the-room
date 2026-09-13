@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import threading
 from collections.abc import Callable, Sequence
 from typing import Any
@@ -39,7 +40,7 @@ PAD_X = 16
 WIN_W = 232
 WAVE_BARS = 28
 WAVE_H = 12
-LANE_H = 3
+LANE_H = 4
 LANE_GAP = 3
 LANE_COUNT = 3
 WAVE_FULL_RMS = 0.14
@@ -239,17 +240,16 @@ class DotWindow:
         self._canvas.bind("<space>", lambda _e: self._on_off())
 
     def _draw_gear(self, cx: int, cy: int) -> None:
+        # Outline cog — chrome only, not a settings panel.
+        teeth: list[float] = []
+        for i in range(16):
+            ang = math.radians(i * 22.5 - 11.25)
+            r = 7.2 if i % 2 == 0 else 4.6
+            teeth.extend((cx + r * math.cos(ang), cy + r * math.sin(ang)))
+        self._canvas.create_polygon(*teeth, outline=ICON, fill="", width=1, tags=("gear",))
         self._canvas.create_oval(
-            cx - 6, cy - 6, cx + 6, cy + 6, outline=ICON, width=1, tags=("gear",)
+            cx - 2.2, cy - 2.2, cx + 2.2, cy + 2.2, outline=ICON, width=1, tags=("gear",)
         )
-        self._canvas.create_oval(
-            cx - 2, cy - 2, cx + 2, cy + 2, outline=ICON, width=1, tags=("gear",)
-        )
-        for dx, dy in ((0, -8), (0, 8), (-8, 0), (8, 0)):
-            self._canvas.create_line(
-                cx + dx * 0.45, cy + dy * 0.45, cx + dx * 0.85, cy + dy * 0.85,
-                fill=ICON, width=2, tags=("gear",),
-            )
 
     def _hit_boxes(self) -> dict[str, tuple[int, int, int, int]]:
         return {
