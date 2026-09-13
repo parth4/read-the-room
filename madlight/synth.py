@@ -17,6 +17,8 @@ SYNTH_KINDS = (
     "hot",
     "music_steady",
     "laughter_burst",
+    "crosstalk",
+    "loud_master_calm",
 )
 
 
@@ -25,37 +27,61 @@ def _tone(n: int, sr: int, freq: float, amp: float) -> np.ndarray:
     return (amp * np.sin(2.0 * np.pi * freq * t)).astype(np.float32)
 
 
+def _peakish(x: np.ndarray, peak: float = 0.95) -> np.ndarray:
+    x = np.asarray(x, dtype=np.float32).ravel()
+    m = float(np.max(np.abs(x))) if x.size else 0.0
+    if m < 1e-9:
+        return x
+    return (x * (peak / m)).astype(np.float32)
+
+
 def render_synth(kind: str, sr: int = 16_000) -> np.ndarray:
-    """Return float32 mono in [-1, 1]. Lengths stay short (repo-small)."""
+    """Return float32 mono in [-1, 1]. Lengths stay short (repo-small).
+
+    Non-silence kinds are peaked near full scale (YouTube-master-ish) so
+    ``--normalize`` compares crest/density, not file LUFS.
+    """
     if kind == "silence":
         return np.zeros(sr, dtype=np.float32)
-    if kind == "calm":
-        # Quiet speech-ish tone — below rising_rms as sine RMS ≈ amp/√2.
-        return _tone(int(1.2 * sr), sr, 180.0, 0.010)
+    if kind == "calm" or kind == "loud_master_calm":
+        # Sparse “syllables” at near-full peak — calm room, loud file.
+        n = int(1.5 * sr)
+        x = np.zeros(n, dtype=np.float32)
+        for start in (0.12, 0.42, 0.72, 1.05):
+            syll = _tone(int(0.08 * sr), sr, 170.0, 0.95)
+            i = int(start * sr)
+            x[i : i + syll.size] = syll[: max(0, n - i)]
+        return x
     if kind == "rising":
-        quiet = _tone(int(0.25 * sr), sr, 220.0, 0.010)
-        n_ramp = int(0.5 * sr)
-        t = np.arange(n_ramp, dtype=np.float64) / sr
-        amps = np.linspace(0.012, 0.072, n_ramp)
-        ramp = (amps * np.sin(2.0 * np.pi * 220.0 * t)).astype(np.float32)
-        hold = _tone(int(1.3 * sr), sr, 220.0, 0.072)
-        return np.concatenate([quiet, ramp, hold])
+        n = int(2.0 * sr)
+        t = np.arange(n, dtype=np.float64) / sr
+        amp = np.clip(0.05 + t * 0.45, 0.05, 0.75)
+        return _peakish(amp * np.sin(2.0 * np.pi * 220.0 * t))
     if kind == "hot":
-        return _tone(int(1.2 * sr), sr, 240.0, 0.22)
+        # Flattened / clipped — high RMS-to-peak (dense heat).
+        raw = _tone(int(1.2 * sr), sr, 240.0, 1.4)
+        return _peakish(np.clip(raw, -0.45, 0.45))
     if kind == "music_steady":
-        # Hold-music-ish: two steady tones at mid energy. Should not always be HOT.
         n = int(1.6 * sr)
-        a = _tone(n, sr, 220.0, 0.055)
-        b = _tone(n, sr, 330.0, 0.040)
-        mix = a + b
-        peak = float(np.max(np.abs(mix))) or 1.0
-        return (mix / peak * 0.09).astype(np.float32)
+        mix = _tone(n, sr, 220.0, 0.55) + _tone(n, sr, 330.0, 0.40)
+        return _peakish(mix)
     if kind == "laughter_burst":
-        # Brief spike in a quiet clip — trap for “max energy = hot”.
-        quiet = _tone(int(0.9 * sr), sr, 160.0, 0.008)
-        burst = _tone(int(0.12 * sr), sr, 400.0, 0.20)
-        tail = _tone(int(0.5 * sr), sr, 160.0, 0.008)
-        return np.concatenate([quiet, burst, tail])
+        quiet = _tone(int(0.9 * sr), sr, 160.0, 0.04)
+        burst = _tone(int(0.12 * sr), sr, 400.0, 0.95)
+        tail = _tone(int(0.5 * sr), sr, 160.0, 0.04)
+        return _peakish(np.concatenate([quiet, burst, tail]))
+    if kind == "crosstalk":
+        # Two overlapping voices (priority fixture). v0 expected heat = rising.
+        n = int(1.6 * sr)
+        t = np.arange(n, dtype=np.float64) / sr
+        v1 = np.sin(2.0 * np.pi * 180.0 * t) * (0.55 + 0.45 * np.sin(2.0 * np.pi * 3.0 * t))
+        v2 = np.zeros(n, dtype=np.float64)
+        d = int(0.07 * sr)
+        t2 = np.arange(n - d, dtype=np.float64) / sr
+        v2[d:] = np.sin(2.0 * np.pi * 265.0 * t2) * (
+            0.55 + 0.45 * np.sin(2.0 * np.pi * 5.2 * t2)
+        )
+        return _peakish(v1 + v2)
     raise ValueError(f"unknown synth kind {kind!r}; want one of {SYNTH_KINDS}")
 
 

@@ -34,5 +34,17 @@
     "expected_level": "calm",
     "category": "laughter_applause",
     "synth": "laughter_burst"
+  },
+  {
+    "path": "synth_crosstalk.wav",
+    "expected_level": "rising",
+    "category": "crosstalk",
+    "synth": "crosstalk"
+  },
+  {
+    "path": "synth_loud_master_calm.wav",
+    "expected_level": "calm",
+    "category": "calm",
+    "synth": "loud_master_calm"
   }
 ]

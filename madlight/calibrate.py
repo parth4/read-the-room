@@ -18,6 +18,8 @@ from madlight.heat import HeatClassifier, HeatConfig, HeatLevel
 from madlight.synth import SYNTH_KINDS, write_kind
 
 LEVELS = (HeatLevel.CALM, HeatLevel.RISING, HeatLevel.HOT)
+# Offline files only. Typical headphone playback is not 0 dBFS YouTube LUFS.
+DEFAULT_FILE_PEAK = 0.15
 
 
 @dataclass(frozen=True)
@@ -84,9 +86,32 @@ def _resample(x: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarray:
     return np.interp(fp, xp, x).astype(np.float32)
 
 
-def classify_audio(samples: np.ndarray, sr: int, config: HeatConfig) -> ClipScore:
+def peak_normalize(samples: np.ndarray, target_peak: float = DEFAULT_FILE_PEAK) -> np.ndarray:
+    """Scale a file so its peak matches a modest playback level.
+
+    Live monitor capture stays absolute (sink volume). YouTube/TED masters
+    sit near full scale, so absolute RMS on the file is not the same as
+    hearing it through headphones.
+    """
+    x = np.asarray(samples, dtype=np.float32).ravel()
+    peak = float(np.max(np.abs(x))) if x.size else 0.0
+    if peak < 1e-9:
+        return x
+    return (x * (float(target_peak) / peak)).astype(np.float32)
+
+
+def classify_audio(
+    samples: np.ndarray,
+    sr: int,
+    config: HeatConfig,
+    *,
+    normalize: bool = False,
+    normalize_peak: float = DEFAULT_FILE_PEAK,
+) -> ClipScore:
     """Walk blocks; predicted = majority of post-warmup levels."""
     x = _resample(np.asarray(samples, dtype=np.float32).ravel(), sr, config.sample_rate)
+    if normalize:
+        x = peak_normalize(x, target_peak=normalize_peak)
     clf = HeatClassifier(config)
     levels: list[HeatLevel] = []
     rmses: list[float] = []
@@ -111,9 +136,17 @@ def classify_audio(samples: np.ndarray, sr: int, config: HeatConfig) -> ClipScor
     )
 
 
-def classify_file(spec: ClipSpec, config: HeatConfig) -> ClipScore:
+def classify_file(
+    spec: ClipSpec,
+    config: HeatConfig,
+    *,
+    normalize: bool = True,
+    normalize_peak: float = DEFAULT_FILE_PEAK,
+) -> ClipScore:
     audio, sr = load_wav(spec.path)
-    raw = classify_audio(audio, sr, config)
+    raw = classify_audio(
+        audio, sr, config, normalize=normalize, normalize_peak=normalize_peak
+    )
     return ClipScore(
         spec=spec,
         predicted=raw.predicted,
@@ -175,11 +208,21 @@ def ensure_synth_clip(spec: ClipSpec, sr: int) -> ClipSpec:
     )
 
 
-def score_clips(specs: Iterable[ClipSpec], config: HeatConfig) -> list[ClipScore]:
+def score_clips(
+    specs: Iterable[ClipSpec],
+    config: HeatConfig,
+    *,
+    normalize: bool = True,
+    normalize_peak: float = DEFAULT_FILE_PEAK,
+) -> list[ClipScore]:
     out: list[ClipScore] = []
     for spec in specs:
         spec = ensure_synth_clip(spec, sr=config.sample_rate)
-        out.append(classify_file(spec, config))
+        out.append(
+            classify_file(
+                spec, config, normalize=normalize, normalize_peak=normalize_peak
+            )
+        )
     return out
 
 
@@ -196,9 +239,23 @@ def confusion(scores: list[ClipScore]) -> dict[str, dict[str, int]]:
     return table
 
 
-def format_report(scores: list[ClipScore], config: HeatConfig) -> str:
+def format_report(
+    scores: list[ClipScore],
+    config: HeatConfig,
+    *,
+    normalize: bool = True,
+    normalize_peak: float = DEFAULT_FILE_PEAK,
+) -> str:
+    if normalize:
+        mode = (
+            f"files peak-normalized to {normalize_peak} "
+            "(offline only; live LED / monitor stays absolute)"
+        )
+    else:
+        mode = "absolute RMS (same domain as live monitor — loud masters look hot)"
     lines = [
         "Mad Light calibrate — offline critic (not neural, not cloud)",
+        f"scoring: {mode}",
         f"thresholds: rising_rms={config.rising_rms}  hot_rms={config.hot_rms}  "
         f"rising_slope={config.rising_slope}",
         "",
@@ -229,6 +286,13 @@ def format_report(scores: list[ClipScore], config: HeatConfig) -> str:
             f"traps called hot: {hot_traps}/{len(traps)}  "
             "(music/laughter should rarely be hot)"
         )
+    xtalk = [s for s in scores if s.spec.category == "crosstalk"]
+    if xtalk:
+        rising_n = sum(1 for s in xtalk if s.predicted is HeatLevel.RISING)
+        lines.append(
+            f"crosstalk (priority): {rising_n}/{len(xtalk)} predicted rising  "
+            "(v0 heat only; stacking detection is v1)"
+        )
     return "\n".join(lines)
 
 
@@ -247,12 +311,20 @@ def _grid() -> list[HeatConfig]:
     return out
 
 
-def propose(specs: list[ClipSpec], start: HeatConfig) -> tuple[HeatConfig, float]:
+def propose(
+    specs: list[ClipSpec],
+    start: HeatConfig,
+    *,
+    normalize: bool = True,
+    normalize_peak: float = DEFAULT_FILE_PEAK,
+) -> tuple[HeatConfig, float]:
     """Grid search. Maximize accuracy; break ties toward defaults, fewer trap-hots."""
     labeled = [ensure_synth_clip(s, sr=start.sample_rate) for s in specs]
 
     def key(cfg: HeatConfig) -> tuple:
-        scores = score_clips(labeled, cfg)
+        scores = score_clips(
+            labeled, cfg, normalize=normalize, normalize_peak=normalize_peak
+        )
         acc = accuracy(scores)
         trap_hot = sum(
             1
@@ -268,7 +340,9 @@ def propose(specs: list[ClipSpec], start: HeatConfig) -> tuple[HeatConfig, float
         return (acc, -trap_hot, -drift)
 
     best = max([start, *_grid()], key=key)
-    return best, accuracy(score_clips(labeled, best))
+    return best, accuracy(
+        score_clips(labeled, best, normalize=normalize, normalize_peak=normalize_peak)
+    )
 
 
 def format_flags(config: HeatConfig) -> str:
@@ -294,6 +368,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="JSON / JSONL / CSV with path, expected_level, optional category, synth",
     )
     p.add_argument("--propose", action="store_true", help="grid-search thresholds")
+    p.add_argument(
+        "--normalize",
+        dest="normalize",
+        action="store_true",
+        default=True,
+        help="peak-normalize each file before scoring (default; YouTube/TED LUFS ≠ live volume)",
+    )
+    p.add_argument(
+        "--no-normalize",
+        dest="normalize",
+        action="store_false",
+        help="absolute RMS like the live monitor (loud masters look hot)",
+    )
+    p.add_argument(
+        "--normalize-peak",
+        type=float,
+        default=DEFAULT_FILE_PEAK,
+        help=f"target peak after --normalize (default {DEFAULT_FILE_PEAK})",
+    )
     p.add_argument("--rising-rms", type=float, default=None)
     p.add_argument("--hot-rms", type=float, default=None)
     p.add_argument("--rising-slope", type=float, default=None)
@@ -323,16 +416,23 @@ def main(argv: list[str] | None = None) -> int:
         print("manifest is empty", file=sys.stderr)
         return 2
     config = config_from_args(args)
+    norm = args.normalize
+    peak = args.normalize_peak
     try:
-        scores = score_clips(specs, config)
+        scores = score_clips(specs, config, normalize=norm, normalize_peak=peak)
     except FileNotFoundError as exc:
         print(exc, file=sys.stderr)
         return 2
-    print(format_report(scores, config))
+    print(format_report(scores, config, normalize=norm, normalize_peak=peak))
     if args.propose:
-        best, best_acc = propose(specs, config)
+        best, best_acc = propose(specs, config, normalize=norm, normalize_peak=peak)
         print("")
         print(f"proposed  accuracy={best_acc:.0%}  {format_flags(best)}")
+        if norm:
+            print(
+                "note: flags are for this file-scoring mode. "
+                "Live playback volume ≠ file LUFS — listen-test before pasting onto madlight."
+            )
         if best == config:
             print("(same as current thresholds)")
     return 0 if accuracy(scores) == 1.0 else 0

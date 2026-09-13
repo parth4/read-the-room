@@ -167,10 +167,10 @@ Label short clips and score the same thresholds the LED uses. Not neural trainin
 
 ```bash
 madlight calibrate --manifest tests/fixtures/manifest.json
-madlight calibrate --manifest samples/manifest.jsonl --propose
+madlight calibrate --manifest samples/manifest.csv
 ```
 
-See [CALIBRATE.md](CALIBRATE.md) and [samples/README.md](samples/README.md).
+Files default to **peak-normalize** (YouTube LUFS ≠ live volume). `--no-normalize` is absolute RMS, like the monitor. Priority fixture class: **crosstalk** (`expected_level=rising` in v0). See [CALIBRATE.md](CALIBRATE.md) and [samples/README.md](samples/README.md).
 
 ## Tuning
 

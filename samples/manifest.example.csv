@@ -1,0 +1,4 @@
+path,expected_level,category
+crosstalk_01.wav,rising,crosstalk
+calm_talk.wav,calm,calm
+hot_room.wav,hot,hot
