@@ -2,13 +2,13 @@
 
 **MAD = Meeting Atmosphere Dial.** **Light** = a signal / bulb — not “lite” as in a cut-down edition.
 
-While a meeting plays on this machine (Zoom, Teams, a browser tab), Mad Light watches the **monitor source of the default audio sink** — the same stream you already hear on headphones or speakers — and shows a compact always-on-top **card**: a center heat circle (green / amber / red / idle grey) with an **emoji face**, plus one scrolling **speech-energy** strip. Optional frequency-band meters stay behind the gear.
+While a meeting plays on this machine (Zoom, Teams, a browser tab), Mad Light watches the **monitor source of the default audio sink** — the same stream you already hear on headphones or speakers — and shows a compact always-on-top **card**: a center heat circle (green / amber / red / idle grey) with a **color face** (bundled Twemoji PNG), plus one scrolling **speech-energy** strip. Optional frequency-band meters stay behind the gear.
 
 It is **not** a dashboard, **not** a labeled pill, **not** an emotion detector, **not** face reading, **not** speaker diarization, **not** a transcript, and it does not call a cloud API.
 
 This tree is **v0 only** — the atmosphere dial. The **clarity / facilitator** work (“point landed?”, reframe, a tiny commandments-style framework) is **v2+** in **[ROADMAP.md](ROADMAP.md)**. It is not implemented here. Rebuild v0 from **[SPEC.md](SPEC.md)**.
 
-License: [MIT](LICENSE). README is written so the repo can go public later; that timing is undecided.
+License: [MIT](LICENSE). Center faces are [Twemoji](https://github.com/jdecked/twemoji) PNGs (© Twitter, Inc and contributors, [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/)) — see [madlight/assets/NOTICE](madlight/assets/NOTICE). Classic Tk cannot render color emoji on Windows, so the circle composites those PNGs with Pillow instead of `create_text`. README is written so the repo can go public later; that timing is undecided.
 
 UI ancestor: [The Point](https://github.com/parth4/point-overlay) is inspiration only. This repo does not copy that YouTube / manual engine.
 
@@ -225,7 +225,7 @@ Loopback gain is often much hotter than a Linux headphone sink (meeting mix near
 madlight --backend soundcard --rising-rms 0.10 --rising-slope 0.16 --hot-rms 0.26 --text
 ```
 
-If the LED never leaves green on a quiet headset mix, lower `--rising-rms` / `--hot-rms` instead — or open **Tuning** and pick **Higher** sensitivity. Use `--demo` first if you want to see grey (silence / pause), heat colors, faces, and the energy strip without a meeting. Tray may be missing on some desktops; click the face (or Space) still pauses.
+If the LED never leaves green on a quiet headset mix, lower `--rising-rms` / `--hot-rms` instead — or open **Tuning** and pick **Higher** sensitivity. Use `--demo` first if you want to see grey (silence / pause), heat colors, **crisp color faces**, and the energy strip without a meeting. The center uses bundled Twemoji PNGs (not Segoe/Noto emoji fonts) so Windows shows the same color faces as Linux. Tray may be missing on some desktops; click the face (or Space) still pauses.
 
 ## PyInstaller (optional)
 

@@ -10,6 +10,15 @@ from typing import Any
 
 from PIL import Image, ImageDraw
 
+from madlight.faces import (
+    FACE_CALM,
+    FACE_HOT,
+    FACE_PAUSED,
+    FACE_PX,
+    FACE_RISING,
+    face_for,
+    load_face_image,
+)
 from madlight.heat import HeatLevel
 
 # Heat / idle fills. Card chrome is a separate dark-gray panel.
@@ -63,24 +72,6 @@ LANE_COLORS = ("#5E9A8A", "#6B8CAE", "#8A7AA8")
 WAVE_LIVE = "#B0B0B0"
 WAVE_DIM = "#3F3F3F"
 
-# Listening faces follow heat. Paused is a muted face — never used for silence.
-FACE_CALM = "🙂"
-FACE_RISING = "😐"
-FACE_HOT = "😠"
-FACE_PAUSED = "🤐"
-
-FACE_FONTS = (
-    "Segoe UI Emoji",
-    "Segoe UI Symbol",
-    "Noto Color Emoji",
-    "Noto Emoji",
-    "Symbola",
-    "Twemoji Mozilla",
-    "Apple Color Emoji",
-    "DejaVu Sans",
-    "Sans",
-)
-
 HELP_TEXT = (
     "Mad Light — meeting heat from the local loopback mix.\n\n"
     "Center face: click to pause / resume listening.\n"
@@ -115,19 +106,8 @@ def led_fill(*, listening: bool, idle: bool, level: HeatLevel) -> str:
     return PALETTE[level]
 
 
-def face_for(*, listening: bool, idle: bool, level: HeatLevel) -> str:
-    """Emoji on the heat circle. Silence while listening stays calm, not muted."""
-    if not listening:
-        return FACE_PAUSED
-    if idle or level is HeatLevel.CALM:
-        return FACE_CALM
-    if level is HeatLevel.RISING:
-        return FACE_RISING
-    return FACE_HOT
-
-
 def center_mark_fill(*, listening: bool, idle: bool) -> str:
-    """Ink for fallback drawn faces (color emoji ignore this)."""
+    """Ink for last-resort stick faces when a PNG asset is missing."""
     if (not listening) or idle:
         return MARK_ON_GRAY
     return MARK_ON_HEAT
@@ -288,19 +268,11 @@ class DotWindow:
         self._led = self._canvas.create_oval(
             cx - r, cy - r, cx + r, cy + r, fill=PALETTE["off"], outline="", tags=("center",)
         )
-        self._face_font = self._resolve_face_font()
-        self._face = self._canvas.create_text(
-            cx,
-            cy + 1,
-            text=FACE_CALM,
-            fill=MARK_ON_GRAY,
-            font=self._face_font or ("Sans", 18),
-            tags=("center", "face"),
-        )
+        self._face_photos: dict[str, Any] = {}
+        self._face_glyph = FACE_CALM
         self._fallback_items: list[int] = []
-        if self._face_font is None:
-            self._canvas.itemconfig(self._face, state="hidden")
-            self._draw_fallback_face(FACE_CALM, MARK_ON_GRAY)
+        self._face = self._canvas.create_image(cx, cy, tags=("center", "face"))
+        self._paint_face(FACE_CALM, MARK_ON_GRAY)
 
         wave_x = PAD_X
         wave_span = WIN_W - PAD_X * 2
@@ -363,30 +335,21 @@ class DotWindow:
     def _card_h(self) -> int:
         return WIN_H_BANDS if self._show_bands else WIN_H
 
-    def _resolve_face_font(self) -> tuple[str, int] | None:
+    def _load_face_photo(self, glyph: str) -> Any | None:
+        cached = self._face_photos.get(glyph)
+        if cached is not None:
+            return cached
+        img = load_face_image(glyph, FACE_PX)
+        if img is None:
+            return None
         try:
-            import tkinter.font as tkfont
+            from PIL import ImageTk
 
-            families = {name.lower(): name for name in tkfont.families(self.root)}
+            photo = ImageTk.PhotoImage(img, master=self.root)
         except Exception:
-            families = {}
-        for want in FACE_FONTS:
-            actual = families.get(want.lower(), want)
-            if not self._glyph_renders(actual, FACE_CALM + FACE_PAUSED):
-                continue
-            return (actual, 18)
-        return None
-
-    def _glyph_renders(self, family: str, sample: str) -> bool:
-        try:
-            item = self._canvas.create_text(-80, -80, text=sample, font=(family, 18))
-            bbox = self._canvas.bbox(item)
-            self._canvas.delete(item)
-        except Exception:
-            return False
-        if not bbox:
-            return False
-        return (bbox[2] - bbox[0]) >= 16
+            return None
+        self._face_photos[glyph] = photo
+        return photo
 
     def _draw_fallback_face(self, glyph: str, color: str) -> None:
         for item in self._fallback_items:
@@ -440,14 +403,16 @@ class DotWindow:
             )
 
     def _paint_face(self, glyph: str, ink: str) -> None:
-        if self._face_font is None:
-            self._canvas.itemconfig(self._face, state="hidden")
-            self._draw_fallback_face(glyph, ink)
+        self._face_glyph = glyph
+        photo = self._load_face_photo(glyph)
+        if photo is not None:
+            self._canvas.itemconfig(self._face, image=photo, state="normal")
+            for item in self._fallback_items:
+                self._canvas.delete(item)
+            self._fallback_items = []
             return
-        self._canvas.itemconfig(self._face, text=glyph, fill=ink, state="normal")
-        for item in self._fallback_items:
-            self._canvas.delete(item)
-        self._fallback_items = []
+        self._canvas.itemconfig(self._face, state="hidden")
+        self._draw_fallback_face(glyph, ink)
 
     def _draw_gear(self, cx: int, cy: int) -> None:
         teeth: list[float] = []
