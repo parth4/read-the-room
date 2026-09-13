@@ -145,8 +145,8 @@ def test_dot_window_paints_faces_and_center_toggles() -> None:
         assert win._canvas.itemcget(win._face, "text") == FACE_PAUSED
 
         assert win.hit_test(8, 8) == "tune"
-        assert win.hit_test(42, 8) == "up"
-        assert win.hit_test(56, 8) == "down"
+        assert win.hit_test(46, 8) == "up"
+        assert win.hit_test(64, 8) == "down"
         assert win.hit_test(80, 8) == "card"
         assert win.hit_test(WIN_W // 2, 10) == "handle"
         assert win.hit_test(WIN_W - 8, 10) == "close"
@@ -160,13 +160,20 @@ def test_dot_window_paints_faces_and_center_toggles() -> None:
         marks: list[str] = []
         win._on_feedback = marks.append
         win.root.update()
-        _click(win, 42, 8)
+        _click(win, 46, 8)
         assert marks == ["up"]
 
         win._last_toggle = -1.0
         _click(win, cx, cy)
         assert hits == ["toggle"]
         assert win._canvas.itemcget(win._face, "text") == FACE_CALM  # press flipped pause→listen
+
+        hits.clear()
+        win._last_toggle = -1.0
+        _click(win, cx, cy)
+        assert hits == ["toggle"]
+        assert win._canvas.itemcget(win._face, "text") == FACE_PAUSED
+        assert win._canvas.itemcget(win._wave_items[0], "fill") == "#3F3F3F"
 
         # Hold/release must not toggle a second time (debounce + click latch).
         hits.clear()

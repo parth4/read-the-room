@@ -252,10 +252,10 @@ class DotWindow:
             anchor="w", tags=("tune",),
         )
         self._up_mark = self._canvas.create_text(
-            42, 10, text="+", fill=ICON, font=("Sans", 12, "bold"), tags=("up",)
+            46, 10, text="+", fill=ICON, font=("Sans", 13, "bold"), tags=("up",)
         )
         self._down_mark = self._canvas.create_text(
-            56, 10, text="−", fill=ICON, font=("Sans", 12, "bold"), tags=("down",)
+            64, 10, text="−", fill=ICON, font=("Sans", 13, "bold"), tags=("down",)
         )
         self._close_x = WIN_W - 16
         self._close_y = 10
@@ -463,9 +463,9 @@ class DotWindow:
     def _hit_boxes(self) -> dict[str, tuple[int, int, int, int]]:
         return {
             "close": (WIN_W - 28, 0, WIN_W, CHROME_H + 2),
-            "tune": (2, 0, 34, CHROME_H + 2),
-            "up": (34, 0, 50, CHROME_H + 2),
-            "down": (50, 0, 68, CHROME_H + 2),
+            "tune": (2, 0, 36, CHROME_H + 2),
+            "up": (36, 0, 56, CHROME_H + 2),
+            "down": (56, 0, 76, CHROME_H + 2),
             "handle": (WIN_W // 2 - 24, 0, WIN_W // 2 + 24, CHROME_H),
             "gear": (self._side_gear - 12, ROW_CY - 12, self._side_gear + 12, ROW_CY + 12),
             "help": (self._side_help - 12, ROW_CY - 12, self._side_help + 12, ROW_CY + 12),
@@ -491,9 +491,17 @@ class DotWindow:
         self._paused = not self._listening
         if not self._listening:
             self._idle = True
+            self._zero_wave()
         self._apply_circle()
         self._on_off()
         return True
+
+    def _zero_wave(self) -> None:
+        mid = WAVE_Y + WAVE_H / 2
+        for i, item in enumerate(self._wave_items):
+            x0 = self._wave_x0 + i * self._wave_bar_w
+            self._canvas.coords(item, x0, mid, x0 + self._wave_bar_w - 1, mid)
+            self._canvas.itemconfig(item, fill=WAVE_DIM)
 
     def _apply_circle(self) -> None:
         color = led_fill(listening=self._listening, idle=self._idle, level=self._level)
@@ -571,6 +579,7 @@ class DotWindow:
             self._tip = None
 
     def _start_drag(self, event: Any) -> None:
+        self._hide_tip()
         self._drag_x = event.x_root - self.root.winfo_x()
         self._drag_y = event.y_root - self.root.winfo_y()
         self._press_xy = (self.root.winfo_x(), self.root.winfo_y())
@@ -651,6 +660,7 @@ class DotWindow:
             menu.grab_release()
 
     def _show_tuning(self) -> None:
+        self._hide_tip()
         if self._tune_win is not None:
             try:
                 self._tune_win.lift()
@@ -678,6 +688,7 @@ class DotWindow:
             bg=CARD,
             fg=ICON,
             font=("Sans", 10),
+            wraplength=360,
         ).pack(anchor="w", padx=16, pady=(0, 10))
         self._tk.Label(
             win,
