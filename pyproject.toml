@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "madlight"
-version = "0.1.0"
-description = "Mad Light — local-only Meeting Atmosphere Dial"
+version = "0.2.0"
+description = "Mad Light — local talk-over Meeting Atmosphere Dial"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

@@ -13,11 +13,14 @@ from madlight.heat import HeatConfig, HeatLevel, HeatSample
 
 PREFS_NAME = "prefs.json"
 FEEDBACK_NAME = "feedback.jsonl"
+FEEDBACK_SCHEMA = 2
 NUDGE_AFTER = 5
 NUDGE_LESS = 1.08
 NUDGE_MORE = 0.93
 RISING_RMS_RANGE = (0.03, 0.22)
 HOT_RMS_RANGE = (0.10, 0.45)
+OVERLAP_RISING_RANGE = (0.28, 0.80)
+OVERLAP_HOT_RANGE = (0.50, 0.92)
 
 # Higher = more sensitive = lower RMS thresholds.
 SENSITIVITY_PRESETS: dict[str, float] = {
@@ -53,6 +56,8 @@ class Prefs:
     rising_rms: float | None = None
     hot_rms: float | None = None
     rising_slope: float | None = None
+    overlap_rising: float | None = None
+    overlap_hot: float | None = None
     sensitivity: float = 1.0
     down_too_hot: int = 0
     down_too_cold: int = 0
@@ -86,6 +91,8 @@ def load_prefs(root: Path | None = None) -> Prefs:
         rising_rms=_opt_float(data.get("rising_rms")),
         hot_rms=_opt_float(data.get("hot_rms")),
         rising_slope=_opt_float(data.get("rising_slope")),
+        overlap_rising=_opt_float(data.get("overlap_rising")),
+        overlap_hot=_opt_float(data.get("overlap_hot")),
         sensitivity=float(data.get("sensitivity") or 1.0),
         down_too_hot=int(data.get("down_too_hot") or 0),
         down_too_cold=int(data.get("down_too_cold") or 0),
@@ -108,6 +115,10 @@ def apply_prefs(cfg: HeatConfig, prefs: Prefs) -> HeatConfig:
         updates["hot_rms"] = prefs.hot_rms
     if prefs.rising_slope is not None:
         updates["rising_slope"] = prefs.rising_slope
+    if prefs.overlap_rising is not None:
+        updates["overlap_rising"] = prefs.overlap_rising
+    if prefs.overlap_hot is not None:
+        updates["overlap_hot"] = prefs.overlap_hot
     return replace(cfg, **updates) if updates else cfg
 
 
@@ -121,6 +132,8 @@ def set_sensitivity(prefs: Prefs, name: str, base: HeatConfig | None = None) -> 
         sensitivity=sensitivity,
         rising_rms=round(cfg.rising_rms * scale, 4),
         hot_rms=round(cfg.hot_rms * scale, 4),
+        overlap_rising=round(_clip(cfg.overlap_rising * scale, *OVERLAP_RISING_RANGE), 3),
+        overlap_hot=round(_clip(cfg.overlap_hot * scale, *OVERLAP_HOT_RANGE), 3),
     )
 
 
@@ -155,10 +168,14 @@ def _nudge(prefs: Prefs, *, less_sensitive: bool) -> Prefs:
     factor = NUDGE_LESS if less_sensitive else NUDGE_MORE
     rising = prefs.rising_rms if prefs.rising_rms is not None else base.rising_rms
     hot = prefs.hot_rms if prefs.hot_rms is not None else base.hot_rms
+    ov_r = prefs.overlap_rising if prefs.overlap_rising is not None else base.overlap_rising
+    ov_h = prefs.overlap_hot if prefs.overlap_hot is not None else base.overlap_hot
     return replace(
         prefs,
         rising_rms=round(_clip(rising * factor, *RISING_RMS_RANGE), 4),
         hot_rms=round(_clip(hot * factor, *HOT_RMS_RANGE), 4),
+        overlap_rising=round(_clip(ov_r * factor, *OVERLAP_RISING_RANGE), 3),
+        overlap_hot=round(_clip(ov_h * factor, *OVERLAP_HOT_RANGE), 3),
         down_too_hot=0,
         down_too_cold=0,
     )
@@ -177,17 +194,21 @@ def append_feedback(
     path = feedback_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
     row: dict[str, Any] = {
+        "schema": FEEDBACK_SCHEMA,
         "ts": datetime.now(timezone.utc).isoformat(),
         "label": label,
         "listening": listening,
         "idle": idle,
         "level": str(level),
+        "overlap": None if sample is None else sample.overlap,
         "rms": None if sample is None else sample.rms,
         "slope": None if sample is None else sample.slope,
         "db_fs": None if sample is None else sample.db_fs,
         "fill": None if sample is None else sample.fill,
         "crest": None if sample is None else sample.crest,
         "cv": None if sample is None else sample.cv,
+        "tightness": None if sample is None else sample.tightness,
+        "f0s": None if sample is None else sample.f0s,
     }
     if extra:
         row.update(extra)

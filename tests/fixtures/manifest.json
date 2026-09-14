@@ -52,5 +52,23 @@
     "expected_level": "calm",
     "category": "calm",
     "synth": "hot_master_vc"
+  },
+  {
+    "path": "synth_loud_monologue.wav",
+    "expected_level": "calm",
+    "category": "calm",
+    "synth": "loud_monologue"
+  },
+  {
+    "path": "synth_emphatic_word.wav",
+    "expected_level": "calm",
+    "category": "laughter_applause",
+    "synth": "emphatic_word"
+  },
+  {
+    "path": "synth_hot_master_overlap.wav",
+    "expected_level": "hot",
+    "category": "crosstalk",
+    "synth": "hot_master_overlap"
   }
 ]
