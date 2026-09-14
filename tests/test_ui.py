@@ -35,6 +35,8 @@ from madlight.ui import (
     CARD_EDGE,
     CENTER_HIT_PAD,
     DOT_PX,
+    HELP_TEXT,
+    TUNING_HELP,
     ICON_DIM,
     LANE_COUNT,
     MARK_ON_GRAY,
@@ -51,6 +53,14 @@ from madlight.ui import (
     led_fill,
     meter_unit,
 )
+
+
+def test_copy_is_talk_over_not_emotion() -> None:
+    blob = (HELP_TEXT + "\n" + TUNING_HELP).lower()
+    assert "talk-over" in blob or "talk over" in blob
+    assert "emotion" in blob
+    assert "mind-reading" in blob or "not emotion" in blob
+    assert "diarization" in blob
 
 
 def test_panel_is_compact_card_without_band_meters() -> None:
@@ -338,6 +348,7 @@ def test_band_meters_are_opt_in() -> None:
         win.root.update_idletasks()
         assert shown == [True]
         assert win._canvas.itemcget(win._lane_fill[0], "state") == "normal"
+        assert win._canvas.itemcget(win._heat_caption, "text") == "talk-over · not emotion"
         assert win._canvas.itemcget(win._band_caption, "text") == "bands · not voices"
         assert win._canvas.winfo_height() == WIN_H_BANDS
     finally:

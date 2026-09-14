@@ -18,6 +18,7 @@ def test_module_help_exits_zero() -> None:
     assert "Meeting Atmosphere Dial" in proc.stdout
     assert "--list-sources" in proc.stdout
     assert "Mad Light" in proc.stdout
+    assert "talk-over" in proc.stdout.lower()
     assert "heat pill" not in proc.stdout.lower()
 
 
@@ -62,9 +63,11 @@ def test_format_line_paused_and_idle() -> None:
     assert "paused" in _format_line(rt)
     rt.set_listening(True)
     rt.idle = True
-    rt.sample = HeatSample(level=HeatLevel.CALM, rms=0.002, slope=0.0, db_fs=-54.0)
+    rt.sample = HeatSample(level=HeatLevel.CALM, rms=0.002, slope=0.0, db_fs=-54.0, overlap=0.0)
     assert _format_line(rt).startswith("idle")
     rt.idle = False
     rt.level = HeatLevel.HOT
-    rt.sample = HeatSample(level=HeatLevel.HOT, rms=0.2, slope=0.0, db_fs=-14.0)
-    assert _format_line(rt).startswith("hot")
+    rt.sample = HeatSample(level=HeatLevel.HOT, rms=0.2, slope=0.0, db_fs=-14.0, overlap=0.91)
+    line = _format_line(rt)
+    assert line.startswith("hot")
+    assert "overlap=0.91" in line

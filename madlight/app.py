@@ -111,11 +111,15 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="madlight",
         description=(
-            "Mad Light — Meeting Atmosphere Dial. Local RMS/slope heat LED "
-            "(recording-indicator dot). Captures the default sink monitor "
-            "(headphones or speakers), never the cloud."
+            "Mad Light — Meeting Atmosphere Dial. Local talk-over heat LED "
+            "from the default sink monitor (headphones or speakers). "
+            "Not emotion AI. Never the cloud."
         ),
-        epilog="Offline critic: madlight calibrate --manifest FILE  (see CALIBRATE.md)",
+        epilog=(
+            "Offline critic: madlight calibrate --manifest FILE. "
+            "Thumbs fit: madlight calibrate --from-feedback --write-prefs  "
+            "(see CALIBRATE.md)"
+        ),
     )
     p.add_argument("--version", action="version", version=f"madlight {__version__}")
     p.add_argument(
@@ -155,6 +159,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--rising-rms", type=float, default=None)
     p.add_argument("--hot-rms", type=float, default=None)
     p.add_argument("--rising-slope", type=float, default=None)
+    p.add_argument("--overlap-rising", type=float, default=None)
+    p.add_argument("--overlap-hot", type=float, default=None)
     return p
 
 
@@ -167,6 +173,10 @@ def _config_from_args(args: argparse.Namespace, base: HeatConfig | None = None) 
         updates["hot_rms"] = args.hot_rms
     if args.rising_slope is not None:
         updates["rising_slope"] = args.rising_slope
+    if args.overlap_rising is not None:
+        updates["overlap_rising"] = args.overlap_rising
+    if args.overlap_hot is not None:
+        updates["overlap_hot"] = args.overlap_hot
     return replace(cfg, **updates) if updates else cfg
 
 
@@ -266,8 +276,8 @@ def _format_line(runtime: Runtime) -> str:
         return "wait    opening monitor…"
     tag = "idle" if idle else f"{level:6}"
     return (
-        f"{tag:6}  rms={sample.rms:.3f}  slope={sample.slope:+.3f}  "
-        f"{sample.db_fs:6.1f} dBFS"
+        f"{tag:6}  overlap={sample.overlap:.2f}  rms={sample.rms:.3f}  "
+        f"slope={sample.slope:+.3f}  {sample.db_fs:6.1f} dBFS"
     )
 
 
@@ -321,7 +331,12 @@ def _run_gui(runtime: Runtime, *, dot: bool, tray: bool) -> bool:
             listening=listening,
             idle=idle,
             level=level,
-            extra={"rising_rms": cfg.rising_rms, "hot_rms": cfg.hot_rms},
+            extra={
+                "rising_rms": cfg.rising_rms,
+                "hot_rms": cfg.hot_rms,
+                "overlap_rising": cfg.overlap_rising,
+                "overlap_hot": cfg.overlap_hot,
+            },
         )
         prefs = load_prefs()
         prefs, nudged = note_feedback(prefs, label, level, idle=idle)
@@ -339,6 +354,14 @@ def _run_gui(runtime: Runtime, *, dot: bool, tray: bool) -> bool:
         prefs.show_band_meters = bool(value)
         save_prefs(prefs)
 
+    def on_recalibrate() -> str:
+        from madlight.feedback import format_fit, recalibrate_from_feedback
+
+        fit = recalibrate_from_feedback(write=True, start=HeatConfig())
+        if fit.n_used:
+            runtime.apply_config(apply_prefs(HeatConfig(), load_prefs()))
+        return format_fit(fit)
+
     if dot:
         try:
             from madlight.ui import DotWindow
@@ -351,6 +374,7 @@ def _run_gui(runtime: Runtime, *, dot: bool, tray: bool) -> bool:
                 get_sensitivity=lambda: load_prefs().sensitivity_name(),
                 on_show_bands=on_show_bands,
                 get_show_bands=lambda: load_prefs().show_band_meters,
+                on_recalibrate=on_recalibrate,
             )
         except Exception as exc:
             print(f"LED unavailable ({exc})", file=sys.stderr)
@@ -430,6 +454,13 @@ def main(argv: list[str] | None = None) -> int:
         from madlight.calibrate import main as calibrate_main
 
         return calibrate_main(argv[1:])
+    if argv and argv[0] in {"recalibrate", "from-feedback"}:
+        from madlight.calibrate import main as calibrate_main
+
+        extra = argv[1:]
+        if "--from-feedback" not in extra:
+            extra = ["--from-feedback", *extra]
+        return calibrate_main(extra)
 
     args = _build_parser().parse_args(argv)
     if args.list_sources:

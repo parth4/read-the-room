@@ -70,8 +70,9 @@ CIRCLE_X = (WIN_W - DOT_PX) // 2
 CIRCLE_Y = CHROME_H + 6
 ROW_CY = CIRCLE_Y + DOT_PX // 2
 WAVE_Y = CIRCLE_Y + DOT_PX + 8
-LANE_Y0 = WAVE_Y + WAVE_H + 16
-WIN_H = WAVE_Y + WAVE_H + 12
+CAPTION_Y = WAVE_Y + WAVE_H + 8
+LANE_Y0 = CAPTION_Y + 16
+WIN_H = CAPTION_Y + 14
 WIN_H_BANDS = LANE_Y0 + LANE_COUNT * LANE_H + (LANE_COUNT - 1) * LANE_GAP + 14
 
 LANE_COLORS = ("#5E9A8A", "#6B8CAE", "#8A7AA8")
@@ -79,30 +80,35 @@ WAVE_LIVE = "#B0B0B0"
 WAVE_DIM = "#3F3F3F"
 
 HELP_TEXT = (
-    "Mad Light — meeting heat from the local loopback mix.\n\n"
+    "Mad Light — glanceable talk-over / room-escalation cue\n"
+    "from the local loopback mix. Not emotion AI, not mind-reading,\n"
+    "not face analysis. Faces are just calm / rising / hot icons.\n\n"
     "Center: click to pause / resume listening.\n"
     "  🎧 on the circle = listening (the dial is hearing the mix)\n"
     "  🎧 down / off = paused (not listening)\n"
-    "  🙂 calm (or silence — still listening)\n"
-    "  😬 rising — energy climbing\n"
-    "  😡 hot\n\n"
-    "Circle color follows heat while listening.\n"
+    "  🙂 calm — no sustained talk-over (or silence — still listening)\n"
+    "  😬 rising — sustained overlap / interrupted turns\n"
+    "  😡 hot — heavier, longer talk-over\n\n"
+    "Circle color follows that talk-over heat while listening.\n"
     "Paused = dark gray + headphones set aside.\n"
     "Silence while listening keeps 🙂 + headphones on (armed).\n\n"
-    "Tuning: the Tune + / − marks mean this heat feels right / wrong\n"
-    "(local log only). Gear opens Tuning — sensitivity is the\n"
-    "self-improve path. Space also pauses / resumes.\n\n"
+    "Tuning: Tune + / − means this heat feels right / wrong\n"
+    "(local log only). Gear → Apply Tune ratings recomputes\n"
+    "overlap sensitivity from those thumbs. Space pauses / resumes.\n\n"
     "The strip under the face is speech energy (one waveform),\n"
     "not voices and not diarization. Optional band meters (gear)\n"
     "are frequency bands of the same mix — never a fixed “3 voices.”"
 )
 
 TUNING_HELP = (
-    "Sensitivity changes when the circle goes yellow / red.\n"
+    "Heat is talk-over / simultaneous speech on the mix you already\n"
+    "hear — not emotion, not “how mad someone is.”\n\n"
+    "Sensitivity: when the circle goes yellow / red.\n"
     "Lower = stays green longer. Higher = yellow/red sooner.\n\n"
-    "Tune + / − on the card: this heat feels right / wrong.\n"
-    "Those write a local log only (no audio, no cloud).\n"
-    "After several downs of the same kind, thresholds nudge."
+    "Tune + / − : this heat feels right / wrong (local log only).\n"
+    "Apply Tune ratings fits overlap cuts from recent thumbs\n"
+    "(your VC mix, not a universal model). After several downs of\n"
+    "the same kind, thresholds also nudge a little on their own."
 )
 
 
@@ -176,6 +182,7 @@ class DotWindow:
         get_sensitivity: Callable[[], str] | None = None,
         on_show_bands: Callable[[bool], None] | None = None,
         get_show_bands: Callable[[], bool] | None = None,
+        on_recalibrate: Callable[[], str] | None = None,
     ) -> None:
         import tkinter as tk
 
@@ -187,6 +194,7 @@ class DotWindow:
         self._get_sensitivity = get_sensitivity or (lambda: "default")
         self._on_show_bands = on_show_bands
         self._get_show_bands = get_show_bands or (lambda: False)
+        self._on_recalibrate = on_recalibrate
         self._paused = False
         self._listening = True
         self._idle = True
@@ -291,9 +299,17 @@ class DotWindow:
             for i in range(WAVE_BARS)
         ]
 
+        self._heat_caption = self._canvas.create_text(
+            PAD_X,
+            CAPTION_Y,
+            text="talk-over · not emotion",
+            fill=ICON_DIM,
+            font=("Sans", 8),
+            anchor="w",
+        )
         self._band_caption = self._canvas.create_text(
             PAD_X,
-            WAVE_Y + WAVE_H + 7,
+            LANE_Y0 - 9,
             text="bands · not voices",
             fill=ICON_DIM,
             font=("Sans", 8),
@@ -576,8 +592,8 @@ class DotWindow:
             "tune": "Tuning — this heat feels right / wrong",
             "up": "Tuning: this heat feels right",
             "down": "Tuning: this heat feels wrong",
-            "gear": "Tuning — sensitivity",
-            "help": "What the faces, headphones, and strip mean",
+            "gear": "Tuning — overlap sensitivity",
+            "help": "Talk-over cue — not emotion AI",
         }
         text = tips.get(hit)
         if text:
@@ -774,10 +790,52 @@ class DotWindow:
             activeforeground=ICON,
             selectcolor="#1A1A1A",
             highlightthickness=0,
-        ).pack(anchor="w", padx=16, pady=(0, 14))
+        ).pack(anchor="w", padx=16, pady=(0, 8))
+        if self._on_recalibrate is not None:
+            self._tk.Button(
+                win,
+                text="Apply Tune ratings",
+                command=lambda w=win: self._run_recalibrate(w),
+                bg="#3A3A3A",
+                fg=ICON,
+                activebackground="#4A4A4A",
+                relief="flat",
+                padx=10,
+                pady=4,
+            ).pack(anchor="w", padx=16, pady=(0, 14))
+        else:
+            self._tk.Label(win, text="", bg=CARD).pack(pady=(0, 6))
         win.resizable(False, False)
         self._tune_win = win
         win.protocol("WM_DELETE_WINDOW", lambda: self._close_tuning(win))
+
+    def _run_recalibrate(self, win: Any) -> None:
+        if self._on_recalibrate is None:
+            return
+        try:
+            text = self._on_recalibrate() or "no ratings yet"
+        except Exception as exc:
+            text = f"could not apply ratings: {exc}"
+        self._close_tuning(win)
+        note = self._tk.Toplevel(self.root)
+        note.title("Tune ratings")
+        note.configure(bg=CARD)
+        try:
+            note.attributes("-topmost", True)
+        except self._tk.TclError:
+            pass
+        self._tk.Label(
+            note,
+            text=text,
+            justify="left",
+            bg=CARD,
+            fg=ICON,
+            font=("Sans", 10),
+            wraplength=380,
+            padx=16,
+            pady=14,
+        ).pack()
+        note.resizable(False, False)
 
     def _pick_sensitivity(self, name: str, win: Any) -> None:
         if self._on_sensitivity is not None:

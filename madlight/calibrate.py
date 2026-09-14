@@ -258,7 +258,9 @@ def format_report(
     lines = [
         "Mad Light calibrate — offline critic (not neural, not cloud)",
         f"scoring: {mode}",
-        f"thresholds: rising_rms={config.rising_rms}  hot_rms={config.hot_rms}  "
+        f"thresholds: overlap_rising={config.overlap_rising}  "
+        f"overlap_hot={config.overlap_hot}  "
+        f"rising_rms={config.rising_rms}  hot_rms={config.hot_rms}  "
         f"rising_slope={config.rising_slope}",
         "",
         f"{'ok':<3}  {'expected':<8} {'predicted':<9} {'max_rms':>7}  clip",
@@ -290,26 +292,24 @@ def format_report(
         )
     xtalk = [s for s in scores if s.spec.category == "crosstalk"]
     if xtalk:
-        rising_n = sum(1 for s in xtalk if s.predicted is HeatLevel.RISING)
+        heat_n = sum(1 for s in xtalk if s.predicted is not HeatLevel.CALM)
         lines.append(
-            f"crosstalk (priority): {rising_n}/{len(xtalk)} predicted rising  "
-            "(v0 heat only; stacking detection is v1)"
+            f"crosstalk (priority): {heat_n}/{len(xtalk)} predicted rising/hot  "
+            "(talk-over / simultaneous speech on the mix)"
         )
     return "\n".join(lines)
 
 
 def _grid() -> list[HeatConfig]:
     base = HeatConfig()
-    rising_rms = (0.045, 0.060, 0.080, 0.100)
-    hot_rms = (0.110, 0.160, 0.180, 0.220)
-    slopes = (0.070, 0.100, 0.140)
+    ov_rise = (0.38, 0.48, 0.56, 0.64)
+    ov_hot = (0.72, 0.80, 0.86)
     out: list[HeatConfig] = []
-    for rr in rising_rms:
-        for hr in hot_rms:
+    for rr in ov_rise:
+        for hr in ov_hot:
             if rr >= hr:
                 continue
-            for sl in slopes:
-                out.append(replace(base, rising_rms=rr, hot_rms=hr, rising_slope=sl))
+            out.append(replace(base, overlap_rising=rr, overlap_hot=hr))
     return out
 
 
@@ -335,9 +335,10 @@ def propose(
             and s.predicted is HeatLevel.HOT
         )
         drift = (
-            abs(cfg.rising_rms - start.rising_rms)
+            abs(cfg.overlap_rising - start.overlap_rising)
+            + abs(cfg.overlap_hot - start.overlap_hot)
+            + abs(cfg.rising_rms - start.rising_rms)
             + abs(cfg.hot_rms - start.hot_rms)
-            + abs(cfg.rising_slope - start.rising_slope)
         )
         return (acc, -trap_hot, -drift)
 
@@ -349,6 +350,8 @@ def propose(
 
 def format_flags(config: HeatConfig) -> str:
     return (
+        f"--overlap-rising {config.overlap_rising} "
+        f"--overlap-hot {config.overlap_hot} "
         f"--rising-rms {config.rising_rms} "
         f"--hot-rms {config.hot_rms} "
         f"--rising-slope {config.rising_slope}"
@@ -365,9 +368,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--manifest",
-        required=True,
         type=Path,
+        default=None,
         help="JSON / JSONL / CSV with path, expected_level, optional category, synth",
+    )
+    p.add_argument(
+        "--from-feedback",
+        action="store_true",
+        help="fit overlap_rising / overlap_hot from local feedback.jsonl thumbs",
+    )
+    p.add_argument(
+        "--write-prefs",
+        action="store_true",
+        help="with --from-feedback, write fitted overlap cuts into prefs.json",
     )
     p.add_argument("--propose", action="store_true", help="grid-search thresholds")
     p.add_argument(
@@ -392,6 +405,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--rising-rms", type=float, default=None)
     p.add_argument("--hot-rms", type=float, default=None)
     p.add_argument("--rising-slope", type=float, default=None)
+    p.add_argument("--overlap-rising", type=float, default=None)
+    p.add_argument("--overlap-hot", type=float, default=None)
     return p
 
 
@@ -404,11 +419,29 @@ def config_from_args(args: argparse.Namespace) -> HeatConfig:
         updates["hot_rms"] = args.hot_rms
     if args.rising_slope is not None:
         updates["rising_slope"] = args.rising_slope
+    if args.overlap_rising is not None:
+        updates["overlap_rising"] = args.overlap_rising
+    if args.overlap_hot is not None:
+        updates["overlap_hot"] = args.overlap_hot
     return replace(cfg, **updates) if updates else cfg
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.from_feedback:
+        from madlight.feedback import format_fit, recalibrate_from_feedback
+
+        fit = recalibrate_from_feedback(write=args.write_prefs, start=config_from_args(args))
+        print(format_fit(fit))
+        if args.write_prefs and fit.n_used:
+            print("wrote overlap cuts to prefs.json (local only)")
+        elif args.write_prefs:
+            print("prefs unchanged (no usable thumbs)", file=sys.stderr)
+        print(f"flags: {format_flags(fit.config)}")
+        return 0 if fit.n_used or not args.write_prefs else 0
+    if args.manifest is None:
+        print("need --manifest FILE or --from-feedback", file=sys.stderr)
+        return 2
     try:
         specs = load_manifest(args.manifest)
     except (OSError, ValueError, json.JSONDecodeError) as exc:

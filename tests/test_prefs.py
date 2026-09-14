@@ -22,11 +22,20 @@ def test_config_dir_honors_env(tmp_path, monkeypatch) -> None:
 
 
 def test_prefs_roundtrip(tmp_path) -> None:
-    prefs = Prefs(rising_rms=0.07, hot_rms=0.20, sensitivity=1.35, show_band_meters=True)
+    prefs = Prefs(
+        rising_rms=0.07,
+        hot_rms=0.20,
+        overlap_rising=0.40,
+        overlap_hot=0.78,
+        sensitivity=1.35,
+        show_band_meters=True,
+    )
     save_prefs(prefs, tmp_path)
     loaded = load_prefs(tmp_path)
     assert loaded.rising_rms == 0.07
     assert loaded.hot_rms == 0.20
+    assert loaded.overlap_rising == 0.40
+    assert loaded.overlap_hot == 0.78
     assert loaded.sensitivity_name() == "higher"
     assert loaded.show_band_meters is True
 
@@ -49,6 +58,8 @@ def test_set_sensitivity_scales_thresholds() -> None:
     lower = set_sensitivity(Prefs(), "lower", base)
     assert higher.rising_rms < base.rising_rms < lower.rising_rms
     assert higher.hot_rms < base.hot_rms < lower.hot_rms
+    assert higher.overlap_rising < base.overlap_rising < lower.overlap_rising
+    assert higher.overlap_hot < base.overlap_hot < lower.overlap_hot
     cfg = apply_prefs(base, higher)
     assert cfg.rising_rms == higher.rising_rms
 
@@ -59,6 +70,7 @@ def test_feedback_jsonl_appends(tmp_path) -> None:
         rms=0.09,
         slope=0.15,
         db_fs=-21.0,
+        overlap=0.61,
         fill=0.9,
         crest=1.6,
         cv=0.4,
@@ -83,12 +95,14 @@ def test_feedback_jsonl_appends(tmp_path) -> None:
     lines = path.read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 2
     assert '"label": "down"' in lines[0]
+    assert '"schema": 2' in lines[0]
+    assert '"overlap": 0.61' in lines[0]
     assert '"fill": 0.9' in lines[0]
     assert '"label": "up"' in lines[1]
 
 
 def test_nudge_after_repeated_downs() -> None:
-    prefs = Prefs(rising_rms=0.08, hot_rms=0.22)
+    prefs = Prefs(rising_rms=0.08, hot_rms=0.22, overlap_rising=0.48, overlap_hot=0.86)
     nudged = False
     for _ in range(NUDGE_AFTER - 1):
         prefs, nudged = note_feedback(prefs, "down", HeatLevel.RISING, idle=False)
@@ -96,9 +110,10 @@ def test_nudge_after_repeated_downs() -> None:
     prefs, nudged = note_feedback(prefs, "down", HeatLevel.RISING, idle=False)
     assert nudged
     assert prefs.rising_rms is not None and prefs.rising_rms > 0.08
+    assert prefs.overlap_rising is not None and prefs.overlap_rising > 0.48
     assert prefs.down_too_hot == 0
 
-    prefs = Prefs(rising_rms=0.08, hot_rms=0.22)
+    prefs = Prefs(rising_rms=0.08, hot_rms=0.22, overlap_rising=0.48)
     for _ in range(NUDGE_AFTER):
         prefs, nudged = note_feedback(prefs, "down", HeatLevel.CALM, idle=True)
     assert nudged

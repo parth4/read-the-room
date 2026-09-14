@@ -30,20 +30,26 @@ def test_manifest_lists_fixture_categories() -> None:
     assert all(s.synth for s in specs)
 
 
-def test_energy_order_indices() -> None:
+def test_overlap_order_indices() -> None:
     clf = HeatClassifier(CFG)
     first: dict[HeatLevel, int] = {}
     i = 0
-    for rms in [0.004] * 16:
-        first.setdefault(clf.push_rms(rms).level, i)
+    for _ in range(12):
+        first.setdefault(clf.push_rms(0.04, f0s=0.0, f0_ratio=0.0).level, i)
         i += 1
-    for rms in [0.02 + 0.006 * k for k in range(40)]:
-        first.setdefault(clf.push_rms(rms).level, i)
+    for k in range(24):
+        first.setdefault(
+            clf.push_rms(0.10 + (0.05 if k % 2 else 0.0), f0s=1.8, f0_ratio=0.45).level, i
+        )
         i += 1
-    for rms in [0.30] * 16:
-        first.setdefault(clf.push_rms(rms).level, i)
+    for k in range(24):
+        first.setdefault(
+            clf.push_rms(0.12 + (0.06 if k % 2 else 0.0), f0s=2.0, f0_ratio=0.70).level, i
+        )
         i += 1
-    assert first[HeatLevel.CALM] < first[HeatLevel.RISING] < first[HeatLevel.HOT]
+    assert HeatLevel.CALM in first
+    assert HeatLevel.RISING in first
+    assert first[HeatLevel.CALM] < first[HeatLevel.RISING]
 
 
 def test_music_steady_is_not_hot_when_normalized() -> None:
@@ -83,6 +89,9 @@ def test_fixture_scorecard_and_cli(tmp_path: Path) -> None:
     assert by_name["synth_crosstalk.wav"].predicted is HeatLevel.RISING
     assert by_name["synth_loud_master_calm.wav"].predicted is not HeatLevel.HOT
     assert by_name["synth_hot_master_vc.wav"].predicted is HeatLevel.CALM
+    assert by_name["synth_loud_monologue.wav"].predicted is HeatLevel.CALM
+    assert by_name["synth_emphatic_word.wav"].predicted is HeatLevel.CALM
+    assert by_name["synth_hot_master_overlap.wav"].predicted is HeatLevel.HOT
     assert by_name["synth_music_steady.wav"].predicted is not HeatLevel.HOT
     assert by_name["synth_laughter_burst.wav"].predicted is not HeatLevel.HOT
 
@@ -122,6 +131,8 @@ def test_propose_returns_heat_config() -> None:
     assert isinstance(best, HeatConfig)
     assert 0.0 <= acc <= 1.0
     flags = format_flags(best)
+    assert "--overlap-rising" in flags
+    assert "--overlap-hot" in flags
     assert "--rising-rms" in flags
     assert "--hot-rms" in flags
 

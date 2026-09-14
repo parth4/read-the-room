@@ -292,16 +292,31 @@ class DemoCapture:
     def read(self) -> np.ndarray:
         n = self._config.block_frames
         sr = self._config.sample_rate
-        amp = _demo_amplitude(self._t)
-        t = self._t + np.arange(n, dtype=np.float64) / sr
-        w_lo, w_mid, w_hi = _demo_band_weights(self._t)
-        # Three tones in the activity-lane bands. Peak-normalize to `amp`
-        # so heat still follows the same envelope (sine RMS ≈ amp / √2).
-        mix = (
+        t0 = self._t
+        t = t0 + np.arange(n, dtype=np.float64) / sr
+        amp, v1_w, v2_w = _demo_voices(t0)
+        w_lo, w_mid, w_hi = _demo_band_weights(t0)
+        # Two talkers in the F0 band (overlap-first heat) plus a light
+        # high band so optional meters still diverge. Peak-normalize to amp.
+        # Extra ~1.4 Hz level wobble so compressed two-talker RMS still
+        # has enough cv for the music gate (steady fifths stay out).
+        wobble = 0.82 + 0.18 * np.sin(2.0 * np.pi * 1.4 * t)
+        talkers = wobble * (
+            v1_w * np.sin(2.0 * np.pi * 175.0 * t)
+            * (0.62 + 0.38 * np.sin(2.0 * np.pi * 4.2 * t))
+            + v2_w * np.sin(2.0 * np.pi * 255.0 * t)
+            * (0.62 + 0.38 * np.sin(2.0 * np.pi * 5.6 * t))
+        )
+        bands = (
             w_lo * np.sin(2.0 * np.pi * 150.0 * t)
             + w_mid * np.sin(2.0 * np.pi * 800.0 * t)
             + w_hi * np.sin(2.0 * np.pi * 3200.0 * t)
         )
+        talkers = talkers / max(float(np.max(np.abs(talkers))), 1e-9)
+        bands = bands / max(float(np.max(np.abs(bands))), 1e-9)
+        # Blend so optional band meters can lead sometimes (talkers live in LF).
+        blend = 0.42 + 0.48 * (0.5 + 0.5 * np.sin(2.0 * np.pi * 0.22 * t0))
+        mix = blend * talkers + (1.0 - blend) * bands
         peak = float(np.max(np.abs(mix))) if mix.size else 1.0
         block = (amp * mix / max(peak, 1e-9)).astype(np.float32)
         self._t += n / sr
@@ -311,22 +326,24 @@ class DemoCapture:
         return
 
 
-def _demo_amplitude(t: float) -> float:
-    """~10s loop: quiet → climb → hot → fade. Peak amplitude of the mix.
+def _demo_voices(t: float) -> tuple[float, float, float]:
+    """~10s loop: quiet → two-voice overlap (rising) → denser overlap (hot) → fade.
 
-    Sized for default rising_rms=0.08 / rising_slope=0.14 / hot_rms=0.22.
-    The climb is short so slope (not density) lights rising before hot.
+    Returns (peak_amp, voice1_weight, voice2_weight). Heat follows talk-over,
+    not loudness: a single loud voice would stay green.
     """
     cycle = 10.0
     x = t % cycle
     if x < 2.0:
-        return 0.006
-    if x < 3.2:
-        # ~0.33 peak/s → RMS slope clears rising_slope after the quiet head.
-        return 0.006 + (x - 2.0) / 1.2 * 0.40
+        return 0.006, 0.15, 0.0
+    if x < 4.6:
+        # Second talker fades in — overlap score climbs, dwell can fire rising.
+        blend = (x - 2.0) / 2.6
+        return 0.34, 1.0, 0.15 + 0.85 * blend
     if x < 8.0:
-        return 0.48
-    return 0.48 * max(0.0, 1.0 - (x - 8.0) / 2.0)
+        return 0.46, 1.0, 1.0
+    fade = max(0.0, 1.0 - (x - 8.0) / 2.0)
+    return 0.46 * fade, 1.0, fade
 
 
 def _demo_band_weights(t: float) -> tuple[float, float, float]:

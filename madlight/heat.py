@@ -1,11 +1,8 @@
-"""Rolling RMS + slope + density → calm / rising / hot.
+"""Overlap-first heat: talk-over → calm / rising / hot.
 
-Energy only. Not emotion, not speech content, not faces.
-
-Density (fill + crest): calm turn-taking speech is peaky with gaps
-(high crest). Talk-over / heated stretch is fuller (high fill, lower
-crest, some modulation). Steady music is full but flat (no modulation)
-so it stays out of the density path.
+Not emotion, not speech content, not faces. Yellow / red mean sustained
+talk-over or interrupted turn-taking on the local loopback mix. RMS and
+slope are secondary room-energy only — they do not promote alone.
 """
 
 from __future__ import annotations
@@ -15,6 +12,13 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 import numpy as np
+
+from madlight.overlap import (
+    CREST_PEAKY,
+    OverlapFeatures,
+    features_from_window,
+    independent_f0s,
+)
 
 # Frequency-band activity (loopback mix). Not speaker IDs.
 LANE_EDGES_HZ: tuple[float, float, float, float] = (80.0, 400.0, 2000.0, 8000.0)
@@ -35,24 +39,32 @@ class HeatConfig:
     block_ms: int = 50
     window_seconds: float = 2.0
     slope_seconds: float = 0.6
-    # Defaults sized for hot loopback / loud meeting masters (see README).
-    # Linux-quiet headphone mixes can lower these via --rising-rms / --hot-rms.
+    # Overlap score is computed on this trailing slice of the RMS window.
+    overlap_seconds: float = 1.0
+    # Two-block (100 ms) F0 analysis — cheap, real-time.
+    f0_blocks: int = 2
+    # Defaults sized for 2–5 person VC on a hot loopback / loud master.
+    # Overlap 0..1; rising / hot are talk-over cuts, not loudness cuts.
+    overlap_rising: float = 0.48
+    overlap_hot: float = 0.86
+    overlap_drop: float = 0.08
+    overlap_ema: float = 0.35
+    # Room-energy (secondary). May shave the overlap cut once overlap
+    # is already present. Never promotes a loud monologue by itself.
     rising_rms: float = 0.08
     hot_rms: float = 0.22
     rising_slope: float = 0.14
+    energy_overlap_boost: float = 0.05
     drop_margin: float = 0.015
     silence_rms: float = 0.008
-    # Density path (talk-over / heated room vs peaky monologue).
+    # Envelope density (talk-over vs peaky monologue / flat music).
     density_fill: float = 0.85
-    density_crest_max: float = 2.0
-    density_cv_min: float = 0.25
-    # Climb must hold before calm→rising (one emphatic word is not yellow).
-    # Density already integrates over window_seconds — only a short confirm.
-    rise_dwell_seconds: float = 1.2
-    density_dwell_seconds: float = 0.15
-    hot_dwell_seconds: float = 0.45
-    # Card meters: slower than PR #6 (stride 3 / lane EMA 0.16).
-    # Lower EMA alpha = heavier history = the strip eases instead of ticking.
+    density_crest_max: float = CREST_PEAKY
+    density_cv_min: float = 0.10
+    # Climb / overlap must hold so one emphatic word is not yellow.
+    rise_dwell_seconds: float = 0.70
+    hot_dwell_seconds: float = 0.40
+    # Card meters: slower than a raw block meter.
     meter_stride: int = 6
     lane_ema: float = 0.08
     wave_ema: float = 0.12
@@ -70,12 +82,12 @@ class HeatConfig:
         return max(2, int(self.slope_seconds * 1000 / self.block_ms))
 
     @property
-    def rise_dwell_blocks(self) -> int:
-        return max(1, int(round(self.rise_dwell_seconds * 1000 / self.block_ms)))
+    def overlap_blocks(self) -> int:
+        return max(4, int(self.overlap_seconds * 1000 / self.block_ms))
 
     @property
-    def density_dwell_blocks(self) -> int:
-        return max(1, int(round(self.density_dwell_seconds * 1000 / self.block_ms)))
+    def rise_dwell_blocks(self) -> int:
+        return max(1, int(round(self.rise_dwell_seconds * 1000 / self.block_ms)))
 
     @property
     def hot_dwell_blocks(self) -> int:
@@ -88,9 +100,12 @@ class HeatSample:
     rms: float
     slope: float
     db_fs: float
+    overlap: float = 0.0
     fill: float = 0.0
     crest: float = 0.0
     cv: float = 0.0
+    tightness: float = 0.0
+    f0s: float = 0.0
 
 
 def _mono(samples: np.ndarray) -> np.ndarray:
@@ -161,26 +176,39 @@ def _level_rank(level: HeatLevel) -> int:
     return 0
 
 
+def energy_boost(rms: float, slope: float, overlap: float, cfg: HeatConfig) -> float:
+    """Small cut-shave when overlap is already present *and* the room climbs.
+
+    Returns 0 unless overlap agrees — loud monologue does not get a boost.
+    """
+    if overlap < cfg.overlap_rising * 0.65:
+        return 0.0
+    if rms < cfg.rising_rms or slope < cfg.rising_slope * 0.5:
+        return 0.0
+    return float(cfg.energy_overlap_boost)
+
+
 def rise_triggers(
     rms: float,
     slope: float,
     current: HeatLevel,
     cfg: HeatConfig,
     *,
-    fill: float = 0.0,
-    crest: float = 0.0,
-    cv: float = 0.0,
+    overlap: float = 0.0,
 ) -> tuple[bool, bool]:
-    """Return (climbing, dense) using the same cuts as classify_heat."""
-    slope_cut = cfg.rising_slope * 0.4 if current is HeatLevel.RISING else cfg.rising_slope
-    climbing = slope >= slope_cut and rms >= cfg.silence_rms
-    dense = (
-        fill >= cfg.density_fill
-        and 0.0 < crest <= cfg.density_crest_max
-        and cv >= cfg.density_cv_min
-        and rms >= cfg.rising_rms
-    )
-    return climbing, dense
+    """Return (overlap_rising, overlap_hot) using the same cuts as classify_heat."""
+    boost = energy_boost(rms, slope, overlap, cfg)
+    rise_cut = cfg.overlap_rising
+    hot_cut = cfg.overlap_hot
+    if current is HeatLevel.RISING or current is HeatLevel.HOT:
+        rise_cut -= cfg.overlap_drop
+    if current is HeatLevel.HOT:
+        hot_cut -= cfg.overlap_drop
+    rise_cut = max(0.0, rise_cut - boost)
+    hot_cut = max(0.0, hot_cut - boost)
+    if rms < cfg.silence_rms:
+        return False, False
+    return overlap >= rise_cut, overlap >= hot_cut
 
 
 def classify_heat(
@@ -189,33 +217,33 @@ def classify_heat(
     current: HeatLevel,
     cfg: HeatConfig,
     *,
+    overlap: float = 0.0,
     fill: float = 0.0,
     crest: float = 0.0,
     cv: float = 0.0,
 ) -> HeatLevel:
-    """Map smoothed RMS + slope + density to heat, with hysteresis.
+    """Map overlap (+ optional room-energy boost) to heat, with hysteresis.
 
     Instantaneous candidate only. HeatClassifier applies dwell before a
     promotion becomes the displayed level.
-    """
-    hot_enter, hot_hold = cfg.hot_rms, cfg.hot_rms - cfg.drop_margin
-    rise_enter, rise_hold = cfg.rising_rms, cfg.rising_rms - cfg.drop_margin
 
-    hot_cut = hot_hold if current is HeatLevel.HOT else hot_enter
-    if rms >= hot_cut:
+    ``fill`` / ``crest`` / ``cv`` are accepted for older call sites and
+    ignored — pass ``overlap`` (the 0..1 talk-over score).
+    """
+    del fill, crest, cv
+    if rms < cfg.silence_rms:
+        return HeatLevel.CALM
+
+    rising, hot = rise_triggers(rms, slope, current, cfg, overlap=overlap)
+    if hot:
         return HeatLevel.HOT
+    if rising:
+        return HeatLevel.RISING
 
     in_heat = current is not HeatLevel.CALM
-    rms_cut = rise_hold if in_heat else rise_enter
-    climbing, dense = rise_triggers(
-        rms, slope, current, cfg, fill=fill, crest=crest, cv=cv
-    )
-    # Absolute loud alone is NOT rising (that false-fired calm TED).
-    # Climb or dense talk-over is.
-    if climbing or dense:
-        return HeatLevel.RISING
-    if in_heat and rms >= rms_cut:
-        return HeatLevel.RISING
+    if in_heat and overlap >= (cfg.overlap_rising - cfg.overlap_drop) * 0.7:
+        if rms >= cfg.rising_rms - cfg.drop_margin:
+            return HeatLevel.RISING
     return HeatLevel.CALM
 
 
@@ -269,13 +297,28 @@ class MeterSmoother:
 
 
 class HeatClassifier:
-    """Rolling RMS buffer → smoothed energy, slope, density, heat level."""
+    """Rolling RMS + F0 → overlap score → heat level with dwell."""
 
     def __init__(self, config: HeatConfig | None = None) -> None:
         self.config = config or HeatConfig()
-        self._rms = deque(maxlen=self.config.window_blocks)
+        self._rms: deque[float] = deque(maxlen=self.config.window_blocks)
+        self._f0s: deque[float] = deque(maxlen=self.config.window_blocks)
+        self._ratios: deque[float] = deque(maxlen=self.config.window_blocks)
+        self._raw: deque[np.ndarray] = deque(maxlen=max(1, self.config.f0_blocks))
         self._level = HeatLevel.CALM
         self._up_hold = 0
+        self._overlap_smooth = 0.0
+        self._feat = OverlapFeatures(
+            score=0.0,
+            fill=0.0,
+            crest=0.0,
+            cv=0.0,
+            tightness=0.0,
+            f0s=0.0,
+            f0_ratio=0.0,
+            dual=0.0,
+            density=0.0,
+        )
 
     @property
     def level(self) -> HeatLevel:
@@ -283,11 +326,31 @@ class HeatClassifier:
 
     def reset(self) -> None:
         self._rms.clear()
+        self._f0s.clear()
+        self._ratios.clear()
+        self._raw.clear()
         self._level = HeatLevel.CALM
         self._up_hold = 0
+        self._overlap_smooth = 0.0
+        self._feat = OverlapFeatures(
+            score=0.0,
+            fill=0.0,
+            crest=0.0,
+            cv=0.0,
+            tightness=0.0,
+            f0s=0.0,
+            f0_ratio=0.0,
+            dual=0.0,
+            density=0.0,
+        )
 
     def push_block(self, samples: np.ndarray) -> HeatSample:
-        return self.push_rms(block_rms(samples))
+        x = _mono(samples)
+        self._raw.append(x)
+        f0_count, f0_ratio = independent_f0s(
+            np.concatenate(list(self._raw)), self.config.sample_rate
+        )
+        return self.push_rms(block_rms(samples), f0s=float(f0_count), f0_ratio=f0_ratio)
 
     def _apply_dwell(
         self,
@@ -295,53 +358,89 @@ class HeatClassifier:
         *,
         rms: float,
         slope: float,
-        fill: float,
-        crest: float,
-        cv: float,
+        overlap: float,
     ) -> HeatLevel:
         if _level_rank(candidate) <= _level_rank(self._level):
             self._up_hold = 0
             return candidate
-        climbing, dense = rise_triggers(
-            rms, slope, self._level, self.config, fill=fill, crest=crest, cv=cv
+        # One rank at a time so calm → rising → hot (not a calm→hot skip).
+        if _level_rank(candidate) > _level_rank(self._level) + 1:
+            candidate = HeatLevel.RISING
+        need = (
+            self.config.hot_dwell_blocks
+            if candidate is HeatLevel.HOT
+            else self.config.rise_dwell_blocks
         )
-        if candidate is HeatLevel.HOT:
-            need = self.config.hot_dwell_blocks
-        elif climbing:
-            need = self.config.rise_dwell_blocks
-        else:
-            need = self.config.density_dwell_blocks
         self._up_hold += 1
         if self._up_hold >= need:
             self._up_hold = 0
             return candidate
         return self._level
 
-    def push_rms(self, rms: float) -> HeatSample:
+    def push_rms(
+        self,
+        rms: float,
+        *,
+        f0s: float = 0.0,
+        f0_ratio: float = 0.0,
+    ) -> HeatSample:
         self._rms.append(float(max(0.0, rms)))
+        self._f0s.append(float(max(0.0, f0s)))
+        self._ratios.append(float(max(0.0, min(1.0, f0_ratio))))
+        feat = self.overlap_features()
+        self._overlap_smooth = ema(self._overlap_smooth, feat.score, self.config.overlap_ema)
+        self._feat = feat
         smoothed = self.smoothed_rms()
         slope = self.slope_per_second()
-        fill, crest, cv = self.density()
+        overlap = self._overlap_smooth
         candidate = classify_heat(
             smoothed,
             slope,
             self._level,
             self.config,
-            fill=fill,
-            crest=crest,
-            cv=cv,
+            overlap=overlap,
         )
         self._level = self._apply_dwell(
-            candidate, rms=smoothed, slope=slope, fill=fill, crest=crest, cv=cv
+            candidate, rms=smoothed, slope=slope, overlap=overlap
         )
         return HeatSample(
             level=self._level,
             rms=smoothed,
             slope=slope,
             db_fs=db_fs(smoothed),
-            fill=fill,
-            crest=crest,
-            cv=cv,
+            overlap=overlap,
+            fill=feat.fill,
+            crest=feat.crest,
+            cv=feat.cv,
+            tightness=feat.tightness,
+            f0s=feat.f0s,
+        )
+
+    def overlap_features(self) -> OverlapFeatures:
+        n = min(len(self._rms), self.config.overlap_blocks)
+        if n < 4:
+            return OverlapFeatures(
+                score=0.0,
+                fill=0.0,
+                crest=0.0,
+                cv=0.0,
+                tightness=0.0,
+                f0s=0.0,
+                f0_ratio=0.0,
+                dual=0.0,
+                density=0.0,
+            )
+        rms = list(self._rms)[-n:]
+        f0s = list(self._f0s)[-n:]
+        ratios = list(self._ratios)[-n:]
+        return features_from_window(
+            rms,
+            f0s,
+            ratios,
+            silence_rms=self.config.silence_rms,
+            block_ms=self.config.block_ms,
+            cv_min=self.config.density_cv_min,
+            crest_peaky=self.config.density_crest_max,
         )
 
     def smoothed_rms(self) -> float:
@@ -352,18 +451,9 @@ class HeatClassifier:
         return float(sum(chunk) / len(chunk))
 
     def density(self) -> tuple[float, float, float]:
-        """Return (fill, crest, cv) over the rolling window."""
-        if len(self._rms) < 4:
-            return 0.0, 0.0, 0.0
-        vals = list(self._rms)
-        arr = np.asarray(vals, dtype=np.float64)
-        fill = float(np.mean(arr >= self.config.silence_rms))
-        p50 = float(np.median(arr))
-        p95 = float(np.percentile(arr, 95))
-        crest = p95 / max(p50, 1e-6)
-        mean = float(np.mean(arr))
-        cv = float(np.std(arr) / max(mean, 1e-6))
-        return fill, float(crest), cv
+        """Return (fill, crest, cv) over the overlap window (legacy tuple)."""
+        feat = self._feat
+        return feat.fill, feat.crest, feat.cv
 
     def slope_per_second(self) -> float:
         if len(self._rms) < 4:

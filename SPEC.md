@@ -1,98 +1,115 @@
-# Mad Light — v0 spec
+# Mad Light — spec
 
 Hand this file to a coding agent: *build Mad Light to this spec.*
 
 **Product:** Mad Light. **MAD** = Meeting Atmosphere Dial. **Light** = a signal / bulb, not a “lite” edition.
 
-**This spec is v0 only.** Do not implement [ROADMAP.md](ROADMAP.md) v1+ (stacking, “point landed?”, commandments, dual guides, vendor hooks). Those are the clarity / facilitator *arc*, not this build.
+**Who it’s for:** Parth in live **2–5 person video calls** — a private, local, real-time glanceable cue when the room is escalating (talk-over) so he can soften or steer. Also useful as a non-verbal ambient cue (accessibility / neurodiversity-minded). **Not a medical device.** No diagnosis.
+
+**Not:** emotion theater, manager dashboards, offline-only analysis, mind-reading, face analysis.
 
 A reference implementation lives in this repo (`madlight`). A faithful rebuild may use different libraries if behavior matches.
 
-## Who it’s for (north star)
+The **clarity / facilitator** arc (“point landed?”, reframe, commandments, dual guides, vendor hooks) is **[ROADMAP.md](ROADMAP.md)** v2+ — do not implement those here.
 
-1. **Accessibility / neurodiversity-minded use** — a simple **non-verbal ambient cue** when conversation heat rises, or when an ask is not landing. **Not a medical device.** No diagnosis, no ADHD/autism claims, no “detects distress.”
-2. **Executive / cryptic meetings** (personal use case) — when an ask is restated and still does not land, the later product should help the holder **reframe**. v0 only shows **atmosphere heat**. Reframe / “point landed?” is **v2+**.
+## What to ship
 
-v0 is a heat LED. It does not know whether a point landed.
+While a meeting plays on the machine (Zoom / Teams / browser), show **one** always-on-top **card** with a recording-indicator-style **colored circle** (green / amber / red / idle grey), headphone listen/pause, and one energy strip.
 
-## What to ship (v0)
-
-While a meeting plays on the machine (Zoom / Teams / browser), show **one** always-on-top **recording-indicator-style colored dot** (tiny circle — hardware LED / Zoom rec pip).
-
-| Color | Meaning (energy only) |
+| Color | Meaning (talk-over, not loudness, not emotion) |
 | --- | --- |
-| Green | calm — quiet / steady low energy |
-| Amber | rising — mid energy or energy climbing |
-| Red | hot — high RMS |
-| Grey | off — not listening |
+| Green | calm — no sustained talk-over |
+| Amber | rising — sustained overlap / interrupted turns |
+| Red | hot — heavier, longer talk-over |
+| Grey | idle (near-silence, still listening) or paused |
 
-- **Not** a labeled pill, **not** a dashboard, **not** status text on the overlay.
-- Tray icon may **mirror the same colors**. Kill / off is on the **tray** (right-click the dot if there is no tray).
-- Off **stops capture immediately**.
+- Faces (🙂 / 😬 / 😡) are **glanceable state icons**, not emotion AI. Copy must say heat is talk-over / room-escalation cues.
+- Tray icon may **mirror the same colors**. Kill / off is on the **tray** (click the circle; Space / Escape).
+- Off **stops capture immediately**. Keep headphone listen/pause + AA circle behavior.
 
 ## Hard UI constraints
 
-- One circle. Diameter on the order of **16px** (window ≲ 28px). If it looks like a toolbar or a “CALM / OFF” chip, it is wrong.
-- Always on top. Draggable. Window title `Mad Light` (for compositor rules).
+- Compact floating card, not a dashboard. Center circle on the order of **44px**. Always on top. Draggable. Window title `Mad Light`.
 - Colors tunable; names stay green / amber / red / grey-off.
+- Optional tiny honesty caption (`talk-over · not emotion`) is fine. Do not put live “CALM / HOT” status text on the circle.
 
 ## Privacy (non-negotiable)
 
 - Completely **offline**. No cloud in the audio path.
-- **Default: do not write audio or transcripts to disk.** No recorder, no WAV, no ASR.
+- **Default: do not write audio or transcripts to disk.** No recorder, no WAV, no ASR. Thumbs write numbers only (`feedback.jsonl`).
 - Capture the **monitor of the default sink** (what the user already hears). Headphones must work if they are the default sink.
 - **Never silently fall back to the microphone.** If there is no monitor, exit with instructions.
 - `--allow-mic` may exist as an explicit footgun; it must not be the default.
 
-## Capture (Linux first)
+## Capture
 
-Primary target: **Omarchy / Arch-like**, PipeWire or PulseAudio.
+Primary: **Omarchy / Arch-like**, PipeWire or PulseAudio. Also **Windows WASAPI** loopback via `soundcard`.
 
 1. Resolve default sink (`pactl get-default-sink` or equivalent).
 2. Open that sink’s **`.monitor` / loopback**.
-3. Backends that work in practice: `soundcard` loopback, then `parec`, then `pw-record`.
-4. Do not block v0 on Windows. WASAPI loopback may be noted, not required.
+3. Backends: `soundcard` loopback, then `parec`, then `pw-record`.
 
 `--list-sources` lists **monitors only** and marks the default.
 
-`--demo` feeds synthetic energy (no device) so the LED can be tested without a meeting.
+`--demo` feeds synthetic **two-voice overlap** (no device) so the LED can be tested without a meeting: quiet → rising → hot.
 
-## Heat classifier
+## Heat classifier (overlap-first)
 
-Energy only. Not emotion, not speech content, not faces.
+Talk-over on the loopback mix. Not emotion, not speech content, not faces, not speaker ID.
 
 - Block RMS (stereo downmix), ~**50 ms** blocks, ~**16 kHz**.
-- Smooth over a short window (~**0.6 s** of recent RMS).
-- Slope: newer window minus older window, per second (~**0.6 s** halves).
-- Map to calm / rising / hot with **hysteresis** so the LED does not flicker.
+- **Primary:** lightweight overlap score over ~**0.5–2 s** (default 1 s):
+  - Independent F0 peaks in 80–400 Hz (two talkers; reject harmonics).
+  - Envelope fill / crest / short-gap tightness (interrupted turn-taking).
+  - Gate out flat held tones / music (near-zero CV + crest ≈ 1).
+- **Secondary:** RMS / slope as room energy. May slightly lower the overlap cut once overlap is already present. **Must not promote** a loud monologue or one emphatic word.
+- Map to calm / rising / hot with **hysteresis + dwell** so the LED does not flicker. One rank at a time (calm → rising → hot).
+- Real-time on desktop (no multi-second lag; no pyannote/torch unless a tiny optional path is clearly needed).
 
-Suggested starting thresholds (linear amplitude 0..1; tune):
+Suggested starting thresholds:
 
 | Name | Default |
 | --- | --- |
-| `rising_rms` | 0.08 |
-| `hot_rms` | 0.22 |
-| `rising_slope` | 0.14 / s |
-| `drop_margin` | 0.015 |
+| `overlap_rising` | 0.48 |
+| `overlap_hot` | 0.86 |
+| `overlap_drop` | 0.08 |
+| `rise_dwell_seconds` | 0.70 |
+| `hot_dwell_seconds` | 0.40 |
+| `rising_rms` | 0.08 (secondary) |
+| `hot_rms` | 0.22 (secondary) |
+| `rising_slope` | 0.14 / s (secondary) |
 | `silence_rms` | 0.008 |
 
-Quiet + steep slope → rising. Near-silence slope noise must stay calm. Density (talk-over) also needs `rms >= rising_rms`, not just the silence floor — hot loopback / loud masters otherwise go amber in a couple of seconds of normal speech. Unit-test with **synthetic RMS sequences** (no microphone). Tune down on a quiet headphone mix; tune up further on a hotter WASAPI loopback.
+Unit-test with **synthetic clips** (no microphone): loud monologue stays calm; overlapping voices → rising/hot with dwell; one emphatic word stays calm.
+
+## Thumbs → calibration
+
+`feedback.jsonl` schema is in `madlight/feedback.py` and [CALIBRATE.md](CALIBRATE.md).
+
+- Tune + / − logs a labeled moment (overlap + envelope + level).
+- After repeated downs, nudge overlap sensitivity on-device.
+- `madlight calibrate --from-feedback --write-prefs` (and gear **Apply Tune ratings**) **fit overlap cuts from recent thumbs** — prefer his VC-mix domain over universal defaults.
 
 ## Stack (KISS)
 
 - Python 3.11+
-- numpy for RMS / slope
-- Simplest reliable Linux monitor capture
-- pystray + optional Tk for the dot
+- numpy for RMS / FFT overlap
+- Simplest reliable Linux monitor + Windows WASAPI loopback
+- pystray + optional Tk for the card
 - Entry: `madlight` and/or `python -m madlight`
-- `pytest` for the classifier; `--demo --text` for a wall-clock calm → rising → hot loop
+- `pytest` for overlap + dwell + prefs/feedback; `--demo --text` for a wall-clock calm → rising → hot loop
 
 Repo slug may stay `mad-lite`. Package / CLI name: **madlight**.
 
-## Out of scope (v0)
+## Out of scope
 
-Whisper / ASR, speaker ID, talk-over, Point faces, cloud APIs, auto-update, signed installers, writing meeting audio to disk, medical claims, “point landed?” / reframe / ten-commandments coach UI.
+Whisper / ASR, speaker ID, emotion / face models, Point faces, cloud APIs, auto-update, signed installers, writing meeting audio to disk, medical claims, “point landed?” / reframe / ten-commandments coach UI.
 
 ## Done when
 
-Fresh clone → install → run → monitor of the default sink → the **dot** goes green on quiet playback and amber/red on loud. Tray (or right-click) Off stops listening. No network in the audio path.
+1. Synthetic/fixture: loud monologue stays calm; overlapping voices → rising/hot with dwell.
+2. One emphatic word does not flip yellow.
+3. Feedback can adjust overlap sensitivity in a documented way.
+4. Real-time path still suitable for live calls (no multi-second lag).
+5. README explains who it’s for and that the signal is talk-over, not emotion AI.
+6. Headphone listen/pause + AA circle still work. No network in the audio path.
