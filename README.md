@@ -1,26 +1,24 @@
 # Mad Light
 
-**MAD = Meeting Atmosphere Dial.** **Light** = a signal / bulb — not “lite” as in a cut-down edition.
+**MAD = Meeting Atmosphere Dial.** **Light** = a signal / bulb (not “lite” as in a cut-down edition).
 
-While a meeting plays on this machine (Zoom, Teams, a browser tab), Mad Light watches the **monitor source of the default audio sink** — the same stream you already hear on headphones or speakers — and shows a compact always-on-top **card**: a center heat circle (green / amber / red / idle grey) with a **simple color face** (bundled Twemoji PNG) and a **headphone badge** (on = listening, off / set aside = paused), plus one scrolling **speech-energy** strip. Optional frequency-band meters stay behind the gear.
+Mad Light is a private, local **talk-over cue** for live meetings — a compact always-on-top **card** that helps you glance when the room is escalating so you can soften or steer. While Zoom, Teams, or a browser tab plays on this machine, it watches the **monitor source of the default audio sink** (the same stream you already hear) and shows a center heat circle (green / amber / red / idle grey) with a **simple color face** (bundled Twemoji PNG), a **headphone badge** (on = listening, off / set aside = paused), and one scrolling **speech-energy** strip. Optional frequency-band meters stay behind the gear.
 
-Heat is a **talk-over / room-escalation** cue: simultaneous speech and interrupted turn-taking on that mix. It is **not** a dashboard, **not** a labeled pill, **not** emotion AI, **not** face reading, **not** speaker diarization, **not** a transcript, and it does not call a cloud API. Faces are glanceable states (calm / rising / hot), not a claim that we read the room’s feelings.
+Heat means **simultaneous speech and interrupted turn-taking** on that mix — a glanceable calm / rising / hot state from classical DSP, not emotion AI or a transcript. Completely offline; no cloud API.
 
-This tree ships the atmosphere dial with **overlap-first** heat (the old “loudness ≈ mad” path is gone). The **clarity / facilitator** work (“point landed?”, reframe, a tiny commandments-style framework) is **v2+** in **[ROADMAP.md](ROADMAP.md)**. It is not implemented here. Rebuild from **[SPEC.md](SPEC.md)**.
+This tree ships the atmosphere dial with **overlap-first** heat. The **clarity / facilitator** work (“point landed?”, reframe, a tiny commandments-style framework) is **v2+** in **[ROADMAP.md](ROADMAP.md)**. Rebuild from **[SPEC.md](SPEC.md)**.
 
-License: [MIT](LICENSE). Center faces and the headphone badge are [Twemoji](https://github.com/jdecked/twemoji) PNGs (© Twitter, Inc and contributors, [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/)) — see [madlight/assets/NOTICE](madlight/assets/NOTICE). Classic Tk cannot render color emoji on Windows, so the circle composites those PNGs with Pillow instead of `create_text`. README is written so the repo can go public later; that timing is undecided.
+License: [MIT](LICENSE). Center faces and the headphone badge are [Twemoji](https://github.com/jdecked/twemoji) PNGs (© Twitter, Inc and contributors, [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/)) — see [madlight/assets/NOTICE](madlight/assets/NOTICE). Classic Tk cannot render color emoji on Windows, so the circle composites those PNGs with Pillow instead of `create_text`.
 
-UI ancestor: [The Point](https://github.com/parth4/point-overlay) is inspiration only. This repo does not copy that YouTube / manual engine.
-
-The git slug may stay `mad-lite`; the product and Python package are **Mad Light** / `madlight`.
+UI ancestor: [The Point](https://github.com/parth4/point-overlay) is inspiration only. Product and Python package: **Mad Light** / `madlight`.
 
 ## Who it’s for
 
-These are the north-star uses. They are why the light exists. Today it still only shows **heat** — talk-over on the mix you already hear.
+These are the north-star uses — why the light exists. Today it shows **heat**: talk-over on the mix you already hear.
 
-**Parth in live 2–5 person video calls.** A private, local, real-time glanceable cue when the room is escalating (people talking over each other, turns stacking) so he can soften or steer. Low lag, local/private, trustworthy enough to act on. Not a manager dashboard and not offline-only analysis.
+**Live 2–5 person video calls.** A private, local, real-time glanceable cue when people talk over each other or turns stack, so you can soften or steer. Low lag, on-device, trustworthy enough to act on.
 
-**Accessibility / neurodiversity-minded.** A simple **non-verbal ambient cue** when conversation heat rises — glanceable, no transcript to parse. **Not a medical device.** No diagnosis, no “detects ADHD / autism / anxiety,” no clinical claims, no emotion detection.
+**Accessibility / neurodiversity-minded.** A simple **non-verbal ambient cue** when conversation heat rises — glanceable, no transcript to parse. **Not a medical device.**
 
 **Executive / cryptic meetings** (personal use case). When an ask is restated and still does not land, the later product should cue a **reframe** (say it differently; check understanding). That facilitator behavior is the **v2+ arc**, not this release.
 
@@ -91,8 +89,9 @@ sudo pacman -S python-gobject libappindicator-gtk3
 ## Install
 
 ```bash
-git clone https://github.com/parth4/mad-lite.git
-cd mad-lite
+git clone https://github.com/parth4/read-the-room.git
+cd read-the-room
+# (the old github.com/parth4/mad-lite path redirects here)
 
 # uv
 uv venv && source .venv/bin/activate
@@ -136,11 +135,11 @@ Useful flags:
 
 Pause / kill switch: click the **center circle** (or Space / Escape), tray **Pause — stop listening**, gear / right-click **Tuning…**, or in `--text` mode type `off` / `pause` / `q` + Enter (or Ctrl+C). Headphones on the circle = listening; headphones off = paused. Drag the handle (or the card) to move. Help explains faces, headphones, Tuning, and that the strip is energy — not voices.
 
-### One energy strip — not voices
+### Speech-energy strip
 
-The bar under the face is a **smoothed speech-energy / waveform** of the same loopback mix. It is **not** speaker diarization, **not** “who is talking,” and it is **not** a fixed set of voice lines.
+The bar under the face is a **smoothed speech-energy / waveform** of the same loopback mix — one glanceable energy trail, not labeled speakers.
 
-Optional **band meters** (gear → Tuning → “Show band meters”) split that mix into low / mid / high **frequency bands**. They are still one mix — not “Person 1/2/3”, not a fake 3-speaker view. Real multi-speaker ID is out of scope.
+Optional **band meters** (gear → Tuning → “Show band meters”) split that mix into low / mid / high **frequency bands**. They stay one mix (frequency, not “Person 1/2/3”). Multi-speaker ID is on the Coming later list below.
 
 ## Headphone sink monitor
 
@@ -257,6 +256,4 @@ The heat LED is what this repo ships (overlap-first). Intent only — [ROADMAP.m
 3. Dual local guides, both sides opt in
 4. Skills / hooks so other apps **may** adopt; we do not claim Zoom or Teams will
 
-## Out of scope
-
-Whisper / ASR, speaker ID / diarization (the waveform and optional band meters are energy / frequency, not people), emotion / face analysis, Point faces, cloud APIs, auto-update, signed installers, writing meeting audio to disk. Talk-over here is **classical DSP on the mix**, not “who said what.”
+**Coming later** (not this release): Whisper / ASR, speaker ID / diarization, emotion or face analysis, cloud APIs, auto-update, signed installers, and writing meeting audio to disk. Talk-over here stays **classical DSP on the mix** — energy and frequency on one loopback, not “who said what.”
